@@ -5,6 +5,8 @@
 #include "pch.h"
 #include "TerminalPage.h"
 
+#include <mmsystem.h>
+
 #include <TerminalCore/ControlKeyStates.hpp>
 #include <TerminalThemeHelpers.h>
 #include <til/hash.h>
@@ -16,6 +18,7 @@
 #include "../TerminalSettingsAppAdapterLib/TerminalSettings.h"
 #include "App.h"
 #include "DebugTapConnection.h"
+#include "DesktopNotification.h"
 #include "MarkdownPaneContent.h"
 #include "Remoting.h"
 #include "ScratchpadContent.h"
@@ -337,6 +340,7 @@ namespace winrt::TerminalApp::implementation
         _tabRow = this->TabRow();
         _tabView = _tabRow.TabView();
         _rearranging = false;
+        _InitializeSessionDrawer();
 
         const auto canDragDrop = _tabDragDropEnabled();
 
@@ -487,6 +491,1106 @@ namespace winrt::TerminalApp::implementation
             [=]() {
                 _adjustProcessPriority();
             });
+    }
+
+    void TerminalPage::_InitializeSessionDrawer()
+    {
+        SessionDrawerToggle().Click([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                page->_sessionDrawerCollapsed = !page->_sessionDrawerCollapsed;
+                page->_UpdateSessionDrawerVisibility();
+                page->_FocusCurrentTab(false);
+            }
+        });
+        // XAML Islands use native cursors. Reapply on movement as well as entry
+        // so the island's default cursor cannot replace the resize affordance.
+        const auto pointerOverDivider = std::make_shared<bool>(false);
+        const auto showResizeCursor = []() {
+            SetCursor(LoadCursorW(nullptr, IDC_SIZEWE));
+        };
+        SessionDrawerDivider().PointerEntered([pointerOverDivider, showResizeCursor](auto&&, auto&&) {
+            *pointerOverDivider = true;
+            showResizeCursor();
+        });
+        const Windows::UI::Xaml::Input::PointerEventHandler moveDivider{ [showResizeCursor](auto&&, auto&&) {
+            showResizeCursor();
+        } };
+        SessionDrawerDivider().AddHandler(UIElement::PointerMovedEvent(), box_value(moveDivider), true);
+        SessionDrawerDivider().PointerExited([pointerOverDivider](const IInspectable& sender, auto&&) {
+            *pointerOverDivider = false;
+            if (!sender.as<Controls::Primitives::Thumb>().IsDragging())
+            {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            }
+        });
+        SessionDrawerDivider().DragStarted([showResizeCursor](auto&&, auto&&) {
+            showResizeCursor();
+        });
+        SessionDrawerDivider().DragCompleted([pointerOverDivider, showResizeCursor](auto&&, auto&&) {
+            if (*pointerOverDivider)
+            {
+                showResizeCursor();
+            }
+            else
+            {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            }
+        });
+
+        // Thumb handles pointer presses itself. Listen to handled events too so
+        // a click reliably gives the divider keyboard focus without stopping drag.
+        const Windows::UI::Xaml::Input::PointerEventHandler focusDivider{ [weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                page->SessionDrawerDivider().Focus(FocusState::Pointer);
+            }
+        } };
+        SessionDrawerDivider().AddHandler(UIElement::PointerPressedEvent(), box_value(focusDivider), true);
+        SessionDrawerDivider().GotFocus([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                page->SessionDrawerDivider().BorderBrush(page->_paneResources.focusedBorderBrush);
+            }
+        });
+        SessionDrawerDivider().LostFocus([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                page->SessionDrawerDivider().BorderBrush(nullptr);
+            }
+        });
+        _tabs.VectorChanged([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                // Tab insertion/removal and reordering update several lists.
+                // Read the final count after the current operation completes.
+                page->Dispatcher().RunAsync(CoreDispatcherPriority::Normal, [weakThis]() {
+                    if (const auto page = weakThis.get())
+                    {
+                        page->_UpdateSessionDrawerVisibility();
+                    }
+                });
+            }
+        });
+        _sessionPreviewTimer.Interval(250ms);
+        _sessionPreviewTimer.Tick([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                try
+                {
+                    page->_RefreshSessionDrawer();
+                }
+                CATCH_LOG();
+            }
+        });
+        _sessionNotificationTimer.Interval(500ms);
+        _sessionNotificationTimer.Tick([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                try
+                {
+                    page->_UpdateSessionNotifications();
+                }
+                CATCH_LOG();
+            }
+        });
+        // Key presses, clicks, and scrolling in the focused tab count as the
+        // user returning to it. Pointer movement alone does not: it happens
+        // whenever the pointer crosses the window. The terminal handles its
+        // own input, so observe handled events too; PreviewKeyDown tunnels
+        // through this grid before the terminal sees the key.
+        const auto userActivity = [weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get(); page && !page->_sessionNotifications.empty())
+            {
+                page->_SessionUserActivity(page->_GetFocusedTab());
+            }
+        };
+        _tabContent.AddHandler(UIElement::PreviewKeyDownEvent(), box_value(Windows::UI::Xaml::Input::KeyEventHandler{ userActivity }), true);
+        _tabContent.AddHandler(UIElement::PointerPressedEvent(), box_value(Windows::UI::Xaml::Input::PointerEventHandler{ userActivity }), true);
+        _tabContent.AddHandler(UIElement::PointerWheelChangedEvent(), box_value(Windows::UI::Xaml::Input::PointerEventHandler{ userActivity }), true);
+        Loaded([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                page->_sessionDrawerLoaded = true;
+                page->_UpdateSessionDrawerVisibility();
+            }
+        });
+        Unloaded([weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get())
+            {
+                page->_sessionDrawerLoaded = false;
+                page->_sessionPreviewTimer.Stop();
+            }
+        });
+        _UpdateSessionDrawerVisibility();
+    }
+
+    void TerminalPage::_UpdateSessionDrawerVisibility()
+    {
+        const auto available = _settings && _settings.GlobalSettings().ShowSessionDrawer() && _tabs.Size() > 1 && !_isInFocusMode;
+        const auto enabled = available && !_sessionDrawerCollapsed;
+        SessionDrawerControls().Visibility(available ? Visibility::Visible : Visibility::Collapsed);
+        SessionDrawerToggleIcon().Glyph(enabled ? L"\uE76B" : L"\uE76C");
+        const auto toggleLabel = enabled ? RS_(L"SessionDrawerHide") : RS_(L"SessionDrawerShow");
+        Automation::AutomationProperties::SetName(SessionDrawerToggle(), toggleLabel);
+        ToolTipService::SetToolTip(SessionDrawerToggle(), box_value(toggleLabel));
+        SessionDrawer().Visibility(enabled ? Visibility::Visible : Visibility::Collapsed);
+        SessionDrawerDivider().Visibility(enabled ? Visibility::Visible : Visibility::Collapsed);
+        MainSessionColumn().Width(GridLengthHelper::FromValueAndType(enabled ? 1.0 - _sessionDrawerFraction : 1.0, GridUnitType::Star));
+        SessionDividerColumn().Width(GridLengthHelper::FromValueAndType(available ? 14.0 : 0.0, GridUnitType::Pixel));
+        SessionDrawerColumn().Width(GridLengthHelper::FromValueAndType(enabled ? _sessionDrawerFraction : 0.0, GridUnitType::Star));
+
+        if (enabled && _visible && _sessionDrawerLoaded)
+        {
+            _sessionPreviewTimer.Start();
+            _RefreshSessionDrawer();
+        }
+        else
+        {
+            _sessionPreviewTimer.Stop();
+        }
+        if (!enabled)
+        {
+            SessionDrawerCards().Children().Clear();
+            _sessionPreviews.clear();
+            SessionDrawerLaunchers().Children().Clear();
+            SessionDrawerLaunchers().ColumnDefinitions().Clear();
+            SessionDrawerLaunchers().Visibility(Visibility::Collapsed);
+            _sessionDrawerProfiles.clear();
+        }
+    }
+
+    void TerminalPage::_RefreshSessionDrawer()
+    {
+        if (!_sessionDrawerLoaded || !_visible || !_tabView || _rearranging || _removing ||
+            SessionDrawer().Visibility() != Visibility::Visible)
+        {
+            return;
+        }
+
+        _RefreshSessionDrawerLaunchers();
+
+        const auto trimWorkingDirectory = [](const TextBlock& label, const double width) {
+            const auto path = unbox_value_or<hstring>(label.Tag(), hstring{});
+            auto text = path;
+            if (width > 0 && !path.empty())
+            {
+                TextBlock measure;
+                measure.FontFamily(label.FontFamily());
+                measure.FontSize(label.FontSize());
+                measure.FontWeight(label.FontWeight());
+                measure.FontStyle(label.FontStyle());
+                measure.FontStretch(label.FontStretch());
+                measure.CharacterSpacing(label.CharacterSpacing());
+                const auto fits = [&](const hstring& candidate) {
+                    measure.Text(candidate);
+                    measure.Measure({ std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() });
+                    return measure.DesiredSize().Width <= width;
+                };
+                if (!fits(path))
+                {
+                    // Keep the longest suffix that fits, without splitting a UTF-16 pair.
+                    const std::wstring_view fullPath{ path };
+                    size_t first = 0;
+                    auto last = fullPath.size();
+                    while (first < last)
+                    {
+                        const auto middle = first + (last - first) / 2;
+                        auto start = middle;
+                        if (til::is_trailing_surrogate(fullPath[start]))
+                        {
+                            ++start;
+                        }
+                        if (fits(hstring{ std::wstring{ L"..." }.append(fullPath.substr(start)) }))
+                        {
+                            last = middle;
+                        }
+                        else
+                        {
+                            first = middle + 1;
+                        }
+                    }
+                    if (first < fullPath.size() && til::is_trailing_surrogate(fullPath[first]))
+                    {
+                        ++first;
+                    }
+                    text = hstring{ std::wstring{ L"..." }.append(fullPath.substr(first)) };
+                }
+            }
+            if (label.Text() != text)
+            {
+                label.Text(text);
+            }
+        };
+
+        // Keep the controls stable between snapshots so refreshes do not steal
+        // keyboard focus or reset the drawer's scroll position. Compare identity,
+        // not indices: tabs may have been closed, reordered, or moved to a window.
+        auto rebuild = _sessionPreviews.size() != _tabs.Size();
+        for (uint32_t i = 0; !rebuild && i < _tabs.Size(); ++i)
+        {
+            rebuild = _sessionPreviews[i].tab != _tabs.GetAt(i);
+        }
+        const auto scroll = SessionDrawerScroll();
+        const auto scrollOffset = scroll.VerticalOffset();
+        if (rebuild)
+        {
+            SessionDrawerCards().Children().Clear();
+            _sessionPreviews.clear();
+            for (const auto& tab : _tabs)
+            {
+                SessionPreview preview;
+                preview.tab = tab;
+                preview.button = Button{};
+                preview.button.Style(Resources().Lookup(box_value(L"SessionPreviewButtonStyle")).as<Windows::UI::Xaml::Style>());
+                preview.button.HorizontalAlignment(HorizontalAlignment::Stretch);
+                preview.button.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+                preview.button.Padding(Thickness{ 8, 8, 8, 8 });
+                preview.button.BorderThickness(Thickness{ 0 });
+                // Keep selection outside the Button template so its pointer-over
+                // and pressed visual states cannot replace the active outline.
+                preview.frame = Border{};
+                preview.frame.HorizontalAlignment(HorizontalAlignment::Stretch);
+                preview.frame.BorderThickness(Thickness{ 2, 2, 2, 2 });
+                preview.frame.CornerRadius(Windows::UI::Xaml::CornerRadius{ 6, 6, 6, 6 });
+                preview.frame.Child(preview.button);
+                preview.button.Click([weakThis = get_weak(), weakTab = winrt::make_weak(tab)](auto&&, auto&&) {
+                    if (const auto page = weakThis.get())
+                    {
+                        if (const auto selectedTab = weakTab.get())
+                        {
+                            uint32_t index;
+                            if (page->_tabs.IndexOf(selectedTab, index))
+                            {
+                                // Selecting an already focused tab raises no
+                                // selection change, but still means the user is here.
+                                page->_SessionUserActivity(selectedTab);
+                                page->_SelectTab(index);
+                                page->_FocusCurrentTab(false);
+                                page->_RefreshSessionDrawer();
+                            }
+                        }
+                    }
+                });
+
+                MenuFlyout contextMenu;
+                MenuFlyoutItem notifyItem;
+                notifyItem.Click([weakThis = get_weak(), weakTab = winrt::make_weak(tab)](auto&&, auto&&) {
+                    if (const auto page = weakThis.get())
+                    {
+                        if (const auto targetTab = weakTab.get())
+                        {
+                            if (page->_SessionNotificationPending(targetTab))
+                            {
+                                page->_CancelSessionNotification(targetTab);
+                            }
+                            else
+                            {
+                                page->_ShowSessionNotifyTip(targetTab);
+                            }
+                        }
+                    }
+                });
+                // A request can start only while activity is detected, as for
+                // the spinner. A pending request can always be cancelled.
+                contextMenu.Opening([weakThis = get_weak(), weakTab = winrt::make_weak(tab), weakItem = winrt::make_weak(notifyItem)](auto&&, auto&&) {
+                    const auto page = weakThis.get();
+                    const auto targetTab = weakTab.get();
+                    const auto item = weakItem.get();
+                    if (page && targetTab && item)
+                    {
+                        const auto pending = page->_SessionNotificationPending(targetTab);
+                        item.Text(pending ? RS_(L"SessionDrawerCancelNotify") : RS_(L"SessionDrawerNotify"));
+                        item.IsEnabled(pending || _SessionWorking(_GetTabImpl(targetTab)));
+                    }
+                });
+                MenuFlyoutItem backgroundItem;
+                backgroundItem.Text(RS_(L"SessionDrawerBackgroundColor"));
+                backgroundItem.Click([weakThis = get_weak(), weakTab = winrt::make_weak(tab)](auto&&, auto&&) {
+                    if (const auto page = weakThis.get())
+                    {
+                        if (const auto targetTab = weakTab.get())
+                        {
+                            page->_ShowSessionPreviewColorPicker(targetTab);
+                        }
+                    }
+                });
+                MenuFlyoutItem closeItem;
+                closeItem.Text(RS_(L"TabClose"));
+                closeItem.Click([weakThis = get_weak(), weakTab = winrt::make_weak(tab)](auto&&, auto&&) {
+                    if (const auto page = weakThis.get())
+                    {
+                        if (const auto targetTab = weakTab.get())
+                        {
+                            uint32_t index;
+                            if (page->_tabs.IndexOf(targetTab, index))
+                            {
+                                page->_HandleCloseTabRequested(targetTab);
+                            }
+                        }
+                    }
+                });
+                contextMenu.Items().Append(notifyItem);
+                contextMenu.Items().Append(backgroundItem);
+                contextMenu.Items().Append(MenuFlyoutSeparator{});
+                contextMenu.Items().Append(closeItem);
+                preview.button.ContextFlyout(contextMenu);
+
+                StackPanel content;
+                content.Spacing(4);
+                preview.title = TextBlock{};
+                preview.title.FontWeight(FontWeights::SemiBold());
+                preview.title.TextTrimming(TextTrimming::CharacterEllipsis);
+                preview.title.VerticalAlignment(VerticalAlignment::Center);
+                preview.status = TextBlock{};
+                preview.status.FontSize(24);
+                preview.status.FontWeight(FontWeights::Bold());
+                preview.status.TextTrimming(TextTrimming::CharacterEllipsis);
+                preview.status.HorizontalAlignment(HorizontalAlignment::Right);
+                preview.status.VerticalAlignment(VerticalAlignment::Center);
+
+                preview.bell = FontIcon{};
+                preview.bell.Glyph(L"\uEA8F");
+                preview.bell.FontFamily(Media::FontFamily{ L"Segoe MDL2 Assets" });
+                preview.bell.FontSize(14);
+                preview.bell.HorizontalAlignment(HorizontalAlignment::Right);
+                preview.bell.VerticalAlignment(VerticalAlignment::Center);
+                preview.bell.Visibility(Visibility::Collapsed);
+                Automation::AutomationProperties::SetName(preview.bell, RS_(L"SessionDrawerBell"));
+                ToolTipService::SetToolTip(preview.bell, box_value(RS_(L"SessionDrawerBell")));
+
+                preview.notify = FontIcon{};
+                preview.notify.Glyph(L"\xE767");
+                preview.notify.FontFamily(Media::FontFamily{ L"Segoe MDL2 Assets" });
+                preview.notify.FontSize(14);
+                preview.notify.Margin(Thickness{ 0, 0, 6, 0 });
+                preview.notify.VerticalAlignment(VerticalAlignment::Center);
+                preview.notify.Visibility(Visibility::Collapsed);
+                Automation::AutomationProperties::SetName(preview.notify, RS_(L"SessionDrawerNotifyPending"));
+                ToolTipService::SetToolTip(preview.notify, box_value(RS_(L"SessionDrawerNotifyPending")));
+
+                Grid header;
+                // Reserve the spinner's size in every status, including
+                // when the bell replaces it, so activity cannot resize the card.
+                preview.status.Text(L"\u280b");
+                preview.status.Measure({ std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity() });
+                const auto spinnerSize = preview.status.DesiredSize();
+                header.MinHeight(spinnerSize.Height);
+                preview.status.Text(L"");
+                // Space the columns with margins: a column gap would remain
+                // beside the speaker icon while it is collapsed.
+                preview.status.Margin(Thickness{ 8, 0, 0, 0 });
+                preview.bell.Margin(Thickness{ 8, 0, 0, 0 });
+                ColumnDefinition notifyColumn;
+                notifyColumn.Width(GridLengthHelper::Auto());
+                ColumnDefinition titleColumn;
+                titleColumn.Width(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
+                ColumnDefinition statusColumn;
+                statusColumn.MinWidth(spinnerSize.Width + 8);
+                statusColumn.Width(GridLengthHelper::Auto());
+                header.ColumnDefinitions().Append(notifyColumn);
+                header.ColumnDefinitions().Append(titleColumn);
+                header.ColumnDefinitions().Append(statusColumn);
+                Grid::SetColumn(preview.title, 1);
+                Grid::SetColumn(preview.status, 2);
+                Grid::SetColumn(preview.bell, 2);
+                header.Children().Append(preview.notify);
+                header.Children().Append(preview.title);
+                header.Children().Append(preview.status);
+                header.Children().Append(preview.bell);
+
+                preview.workingDirectory = TextBlock{};
+                preview.workingDirectory.FontSize(12);
+                preview.workingDirectory.Opacity(0.7);
+                preview.workingDirectory.TextWrapping(TextWrapping::NoWrap);
+                preview.workingDirectory.TextTrimming(TextTrimming::Clip);
+                preview.workingDirectory.Visibility(Visibility::Collapsed);
+                // TextBlock::ActualWidth is its text width, which may shrink as
+                // we trim it. Use the card's content width to avoid that feedback.
+                content.SizeChanged([trimWorkingDirectory, weakLabel = make_weak(preview.workingDirectory)](const IInspectable&, const SizeChangedEventArgs& args) {
+                    if (const auto label = weakLabel.get())
+                    {
+                        trimWorkingDirectory(label, args.NewSize().Width);
+                    }
+                });
+
+                preview.text = TextBlock{};
+                preview.text.FontFamily(Media::FontFamily{ L"Cascadia Mono, Consolas" });
+                preview.text.FontSize(12);
+                preview.text.LineHeight(16);
+                preview.text.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+                preview.text.Height(160);
+                preview.text.MaxLines(10);
+                preview.text.TextWrapping(TextWrapping::NoWrap);
+                // Centered TUI content can start beyond the card's right edge.
+                // Clip that padding rather than showing ellipses on blank rows.
+                preview.text.TextTrimming(TextTrimming::Clip);
+                preview.text.IsTextSelectionEnabled(false);
+                content.Children().Append(header);
+                content.Children().Append(preview.workingDirectory);
+                content.Children().Append(preview.text);
+                preview.button.Content(content);
+                SessionDrawerCards().Children().Append(preview.frame);
+                _sessionPreviews.emplace_back(std::move(preview));
+            }
+        }
+
+        const auto focusedTab = _GetFocusedTab();
+        for (auto& preview : _sessionPreviews)
+        {
+            try
+            {
+                const auto tab = _GetTabImpl(preview.tab);
+                const auto title = preview.tab.Title();
+                const auto paneCount = tab->GetLeafPaneCount();
+                const auto previewTitle = paneCount > 1 ? hstring{ fmt::format(FMT_COMPILE(L"[{}] {}"), paneCount, title) } : title;
+                if (preview.title.Text() != previewTitle)
+                {
+                    preview.title.Text(previewTitle);
+                    Automation::AutomationProperties::SetName(preview.button, previewTitle);
+                    ToolTipService::SetToolTip(preview.button, box_value(previewTitle));
+                }
+                const auto status = tab->TabStatus();
+                const auto control = tab->GetActiveTerminalControl();
+                const auto selected = preview.tab == focusedTab;
+                preview.frame.BorderBrush(selected ? _paneResources.focusedBorderBrush : nullptr);
+                const auto notifyPending = _SessionNotificationPending(preview.tab);
+                const auto notifyVisibility = notifyPending ? Visibility::Visible : Visibility::Collapsed;
+                if (preview.notify.Visibility() != notifyVisibility)
+                {
+                    preview.notify.Visibility(notifyVisibility);
+                }
+
+                // Only copy buffers for cards in view. Background tabs continue
+                // parsing output normally; no extra terminal or renderer is made.
+                const auto top = preview.button.TransformToVisual(scroll).TransformPoint({ 0, 0 }).Y;
+                if (scroll.ActualHeight() <= 0 || top >= scroll.ActualHeight() || top + preview.button.ActualHeight() <= 0)
+                {
+                    continue;
+                }
+                const auto workingDirectory = control ? control.WorkingDirectory() : hstring{};
+                if (unbox_value_or<hstring>(preview.workingDirectory.Tag(), hstring{}) != workingDirectory)
+                {
+                    preview.workingDirectory.Tag(box_value(workingDirectory));
+                    preview.workingDirectory.Visibility(workingDirectory.empty() ? Visibility::Collapsed : Visibility::Visible);
+                    ToolTipService::SetToolTip(preview.workingDirectory, box_value(workingDirectory));
+                    Automation::AutomationProperties::SetName(preview.workingDirectory, workingDirectory);
+                    trimWorkingDirectory(preview.workingDirectory, preview.button.Content().as<StackPanel>().ActualWidth());
+                }
+                std::vector<PreviewTextRun> runs;
+                std::wstring text;
+                if (control)
+                {
+                    const auto styledText = control.ReadViewportText(10);
+                    runs.assign(styledText.begin(), styledText.end());
+                    for (const auto& run : runs)
+                    {
+                        text.append(run.Text);
+                    }
+                }
+                else
+                {
+                    text = RS_(L"SessionDrawerNoTerminal");
+                }
+                const auto activity = _SessionActivityDetected(tab, control, text);
+                const auto working = activity != SessionActivity::Idle;
+                tab->UpdateSessionPreviewActivity(working);
+                // Detection reads the whole footer, but the card leaves out
+                // items that would push the task item past its edge.
+                RemoveClaudeFooterClutter(runs, text);
+
+                // Bell highlighting temporarily overrides the user's color.
+                // Restore it when the bell clears, even if the text is unchanged.
+                // A pending finish notification marks cards without a color.
+                const auto bell = status.BellIndicator();
+                auto customBackground = tab->SessionPreviewColor();
+                if (!customBackground && notifyPending)
+                {
+                    customBackground = Windows::UI::Color{ 255, 176, 90, 20 };
+                }
+                auto background = customBackground;
+                if (bell)
+                {
+                    background = Windows::UI::Color{ 255, 246, 209, 209 };
+                }
+                else if (!background && control)
+                {
+                    background = control.BackgroundColor();
+                }
+                const auto foreground = bell ? Windows::UI::Color{ 255, 56, 22, 22 } :
+                                        background && ColorFix::GetLightness(til::color{ *background }) >= 0.6f ? Colors::Black() : Colors::White();
+                if (preview.backgroundColor != background || preview.bellHighlighted != bell)
+                {
+                    if (background)
+                    {
+                        preview.button.Background(SolidColorBrush{ *background });
+                        preview.button.Foreground(SolidColorBrush{ foreground });
+                    }
+                    else
+                    {
+                        preview.button.ClearValue(Controls::Control::BackgroundProperty());
+                        preview.button.ClearValue(Controls::Control::ForegroundProperty());
+                    }
+                    preview.backgroundColor = background;
+                    preview.bellHighlighted = bell;
+                }
+
+                auto label = status.BellIndicator() ? RS_(L"SessionDrawerBell") :
+                             status.IsConnectionClosed() ? RS_(L"SessionDrawerClosed") : hstring{};
+                // Background tasks get a slower, dimmed spinner: the session
+                // waits for input until one of them wakes it.
+                const auto backgroundTasks = activity == SessionActivity::Background;
+                if (working && !status.BellIndicator() && !status.IsConnectionClosed())
+                {
+                    static constexpr std::wstring_view frames{ L"\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f" };
+                    const uint64_t frameMs = backgroundTasks ? 500 : 250;
+                    label = hstring{ frames.substr((GetTickCount64() / frameMs) % frames.size(), 1) };
+                }
+                const auto showSpinner = working && !bell && !status.IsConnectionClosed();
+                preview.status.FontSize(showSpinner ? 24 : 12);
+                preview.status.FontWeight(showSpinner ? FontWeights::Bold() : FontWeights::Normal());
+                preview.status.Opacity(showSpinner && backgroundTasks ? 0.5 : 1.0);
+                if (preview.status.Text() != label)
+                {
+                    preview.status.Text(label);
+                    Automation::AutomationProperties::SetHelpText(preview.button, label);
+                    preview.status.Visibility(bell ? Visibility::Collapsed : Visibility::Visible);
+                    preview.bell.Visibility(bell ? Visibility::Visible : Visibility::Collapsed);
+                }
+                const auto useContrast = bell || customBackground.has_value();
+                if (preview.textRuns != runs || preview.textBackgroundColor != background || preview.textUsesContrast != useContrast ||
+                    preview.text.Text() != text)
+                {
+                    preview.text.Text(text);
+                    const auto highlights = preview.text.TextHighlighters();
+                    highlights.Clear();
+                    // Reuse one XAML highlighter for every range with the same
+                    // colours. Syntax-highlighted output can contain many runs.
+                    std::unordered_map<uint64_t, Windows::UI::Xaml::Documents::TextHighlighter> styles;
+                    const auto colorKey = [](const Windows::UI::Color color) {
+                        return (uint32_t{ color.A } << 24) | (uint32_t{ color.R } << 16) | (uint32_t{ color.G } << 8) | color.B;
+                    };
+                    int32_t offset = 0;
+                    for (const auto& run : runs)
+                    {
+                        const auto length = gsl::narrow<int32_t>(run.Text.size());
+                        // A custom card background adapts ordinary default text.
+                        // Explicit terminal colours and reverse-video backgrounds
+                        // keep their resolved values. Concealed text stays hidden.
+                        const auto runBackground = run.BackgroundIsDefault && background ? *background : run.Background;
+                        auto runForeground = run.Foreground;
+                        if (useContrast && run.ForegroundIsDefault && run.BackgroundIsDefault)
+                        {
+                            const auto adjusted = ColorFix::GetPerceivableColor(til::color{ run.Foreground }, til::color{ runBackground }, 0.5f * 0.5f);
+                            runForeground = til::color{ adjusted };
+                        }
+                        if (run.IsHidden)
+                        {
+                            runForeground = runBackground;
+                        }
+                        const auto highlightBackground = run.BackgroundIsDefault ? Colors::Transparent() : run.Background;
+                        const auto key = (uint64_t{ colorKey(runForeground) } << 32) | colorKey(highlightBackground);
+                        auto [style, inserted] = styles.try_emplace(key, nullptr);
+                        if (inserted)
+                        {
+                            Windows::UI::Xaml::Documents::TextHighlighter highlight;
+                            highlight.Foreground(SolidColorBrush{ runForeground });
+                            highlight.Background(SolidColorBrush{ highlightBackground });
+                            highlights.Append(highlight);
+                            style->second = highlight;
+                        }
+                        style->second.Ranges().Append({ offset, length });
+                        offset += length;
+                    }
+                    preview.textRuns = std::move(runs);
+                    preview.textBackgroundColor = background;
+                    preview.textUsesContrast = useContrast;
+                }
+            }
+            CATCH_LOG();
+        }
+
+        if (rebuild)
+        {
+            // Clearing the cards resets the scroll extent. Restore the offset
+            // after layout, when the new extent can clamp it to the new bottom.
+            scroll.UpdateLayout();
+            scroll.ChangeView(nullptr, scrollOffset, nullptr, true);
+        }
+    }
+
+    void TerminalPage::_ShowSessionPreviewColorPicker(const winrt::TerminalApp::Tab& tab)
+    {
+        const auto preview = std::find_if(_sessionPreviews.begin(), _sessionPreviews.end(), [&](const auto& item) {
+            return item.tab == tab;
+        });
+        if (preview == _sessionPreviews.end())
+        {
+            return;
+        }
+
+        // Keep callbacks tied to tab identity, rather than a card or tab index.
+        // Cards can be rebuilt while a picker is open.
+        const auto setColor = [weakThis = get_weak(), weakTab = winrt::make_weak(tab)](std::optional<Windows::UI::Color> color) {
+            if (const auto page = weakThis.get())
+            {
+                if (const auto targetTab = weakTab.get())
+                {
+                    uint32_t index;
+                    if (page->_tabs.IndexOf(targetTab, index))
+                    {
+                        page->_GetTabImpl(targetTab)->SessionPreviewColor(color);
+                        page->_RefreshSessionDrawer();
+                    }
+                }
+            }
+        };
+        _sessionPreviewColorPicker = winrt::make<ColorPickupFlyout>(true);
+        _sessionPreviewColorPicker.ColorSelected([setColor](const Windows::UI::Color& color) {
+            setColor(color);
+        });
+        _sessionPreviewColorPicker.ColorCleared([setColor]() {
+            setColor(std::nullopt);
+        });
+        _sessionPreviewColorPicker.ShowAt(preview->button);
+    }
+
+    // Activity uses the visible preview, taskbar progress, and an animated
+    // title. The interrupt hint covers working, waiting, compacting, and
+    // custom activity labels without depending on their wording. Otherwise,
+    // Claude Code's status rows decide, including in panes too narrow for
+    // the hint.
+    SessionActivity TerminalPage::_SessionActivityDetected(const winrt::com_ptr<Tab>& tab, const TermControl& control, std::wstring_view snapshot)
+    {
+        if (tab->TabStatus().IsConnectionClosed())
+        {
+            return SessionActivity::Idle;
+        }
+        const auto title = tab->Title();
+        const auto progress = control ? control.TaskbarState() : 0;
+        if (snapshot.find(L"esc to interrupt") != snapshot.npos || progress == 1 || progress == 3 ||
+            (!title.empty() && title.front() >= L'\x2801' && title.front() <= L'\x28ff'))
+        {
+            return SessionActivity::Working;
+        }
+        return ClaudeSessionActivity(snapshot);
+    }
+
+    // Reads the rows a drawer card previews, for tabs whose card is not in view.
+    bool TerminalPage::_SessionWorking(const winrt::com_ptr<Tab>& tab)
+    {
+        const auto control = tab->GetActiveTerminalControl();
+        std::wstring text;
+        if (control)
+        {
+            for (const auto& run : control.ReadViewportText(10))
+            {
+                text.append(run.Text);
+            }
+        }
+        return _SessionActivityDetected(tab, control, text) != SessionActivity::Idle;
+    }
+
+    bool TerminalPage::_SessionNotificationPending(const winrt::TerminalApp::Tab& tab) const
+    {
+        return std::any_of(_sessionNotifications.begin(), _sessionNotifications.end(), [&](const auto& item) {
+            return item.tab == tab;
+        });
+    }
+
+    void TerminalPage::_CancelSessionNotification(const winrt::TerminalApp::Tab& tab)
+    {
+        std::erase_if(_sessionNotifications, [&](const auto& item) {
+            return item.tab == tab;
+        });
+        if (_sessionNotifications.empty())
+        {
+            _sessionNotificationTimer.Stop();
+        }
+        _RefreshSessionDrawer();
+    }
+
+    // Input to a tab after its activity stops means the user has returned,
+    // so the pending notification and callback are dropped.
+    void TerminalPage::_SessionUserActivity(const winrt::TerminalApp::Tab& tab)
+    {
+        const auto item = std::find_if(_sessionNotifications.begin(), _sessionNotifications.end(), [&](const auto& entry) {
+            return entry.tab == tab;
+        });
+        if (item != _sessionNotifications.end())
+        {
+            item->notifier.UserActivity();
+            if (item->notifier.Done())
+            {
+                _CancelSessionNotification(tab);
+            }
+        }
+    }
+
+    // Requests follow their tab's activity even when its card is offscreen,
+    // the drawer is hidden, or the window is minimized.
+    void TerminalPage::_UpdateSessionNotifications()
+    {
+        // A tab that closed or moved to another window drops its request.
+        auto changed = std::erase_if(_sessionNotifications, [&](const auto& item) {
+            uint32_t index;
+            return !_tabs.IndexOf(item.tab, index);
+        }) > 0;
+
+        const auto now = GetTickCount64();
+        for (auto& item : _sessionNotifications)
+        {
+            const auto tab = _GetTabImpl(item.tab);
+            switch (item.notifier.Update(now, _SessionWorking(tab)))
+            {
+            case SessionFinishNotifier::Action::Notify:
+                _NotifySessionFinished(tab, item);
+                break;
+            case SessionFinishNotifier::Action::Callback:
+            {
+                const auto title = tab->Title();
+                const auto appName = CascadiaSettings::ApplicationDisplayName();
+                _SendSessionCallback(item.callbackUrl, hstring{ RS_fmt(L"SessionNotifyCallbackMessage", std::wstring_view{ title }, std::wstring_view{ appName }) });
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        changed |= std::erase_if(_sessionNotifications, [](const auto& item) {
+                       return item.notifier.Done();
+                   }) > 0;
+        if (_sessionNotifications.empty())
+        {
+            _sessionNotificationTimer.Stop();
+        }
+        if (changed)
+        {
+            _RefreshSessionDrawer();
+        }
+    }
+
+    void TerminalPage::_NotifySessionFinished(const winrt::com_ptr<Tab>& tab, const SessionNotification& notification)
+    {
+        const auto title = tab->Title();
+        const hstring message{ notification.callbackUrl.empty() ?
+                                   RS_fmt(L"SessionNotifyToast", std::wstring_view{ title }) :
+                                   RS_fmt(L"SessionNotifyToastCallback", std::wstring_view{ title }, notification.delay) };
+
+        // Play the sound and flash the taskbar ourselves. Do Not Disturb can
+        // suppress a toast, and its own sound with it.
+        PlaySoundW(L"Notification.Default", nullptr, SND_ALIAS | SND_ASYNC | SND_SYSTEM);
+        RaiseVisualBell.raise(nullptr, nullptr);
+
+        const auto tabHash = std::hash<winrt::Windows::Foundation::IUnknown>{}(notification.tab);
+        const implementation::DesktopNotificationArgs args{
+            .Title = CascadiaSettings::ApplicationDisplayName(),
+            .Message = message,
+            .Tag = hstring{ fmt::format(FMT_COMPILE(L"wt-finished-{:x}"), tabHash) },
+            .Requested = true,
+            .Silent = true,
+        };
+        implementation::DesktopNotification::SendNotification(args, [weakThis = get_weak(), weakTab = winrt::make_weak(notification.tab)]() {
+            if (const auto page = weakThis.get())
+            {
+                // The toast Activated callback runs on a background thread.
+                page->Dispatcher().RunAsync(CoreDispatcherPriority::Normal, [weakThis, weakTab]() {
+                    if (const auto page = weakThis.get())
+                    {
+                        page->SummonWindowRequested.raise(nullptr, nullptr);
+                        if (const auto tab = weakTab.get())
+                        {
+                            // Clicking the notification is the user returning to the tab.
+                            page->_SessionUserActivity(tab);
+                            if (const auto index = page->_GetTabIndex(tab))
+                            {
+                                page->_SelectTab(*index);
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    // Posts the message as plain text: ntfy shows it as the notification body,
+    // and other webhooks receive it as the request content.
+    safe_void_coroutine TerminalPage::_SendSessionCallback(const winrt::hstring url, const winrt::hstring message)
+    {
+        try
+        {
+            // Never show a credential prompt for a callback nobody is watching.
+            Windows::Web::Http::Filters::HttpBaseProtocolFilter filter;
+            filter.AllowUI(false);
+            Windows::Web::Http::HttpClient client{ filter };
+            Windows::Web::Http::HttpStringContent content{ message, Windows::Storage::Streams::UnicodeEncoding::Utf8, L"text/plain" };
+            const auto response = co_await client.PostAsync(Windows::Foundation::Uri{ url }, content);
+            response.EnsureSuccessStatusCode();
+        }
+        CATCH_LOG();
+    }
+
+    void TerminalPage::_ShowSessionNotifyTip(const winrt::TerminalApp::Tab& tab)
+    {
+        if (!SessionNotifyTip())
+        {
+            // Load the tip before filling in the last values used.
+            if (const auto tip = FindName(L"SessionNotifyTip").try_as<MUX::Controls::TeachingTip>())
+            {
+                tip.Closed([weakThis = get_weak()](auto&&, auto&&) {
+                    if (const auto page = weakThis.get())
+                    {
+                        page->_sessionNotifyLayoutUpdatedRevoker.revoke();
+                        page->_FocusCurrentTab(false);
+                    }
+                });
+                // The NumberBox handles Enter and Escape itself, so observe handled keys too.
+                const auto panel = SessionNotifyPanel();
+                panel.AddHandler(UIElement::KeyDownEvent(), box_value(Windows::UI::Xaml::Input::KeyEventHandler{ get_weak(), &TerminalPage::_SessionNotifyKeyDown }), true);
+                panel.AddHandler(UIElement::KeyUpEvent(), box_value(Windows::UI::Xaml::Input::KeyEventHandler{ get_weak(), &TerminalPage::_SessionNotifyKeyUp }), true);
+            }
+        }
+        _UpdateTeachingTipTheme(SessionNotifyTip().try_as<FrameworkElement>());
+
+        _sessionNotifyTab = tab;
+        const auto state = ApplicationState::SharedInstance();
+        SessionNotifyDelayBox().Value(state.SessionNotifyDelay());
+        SessionNotifyUrlBox().Text(state.SessionNotifyCallbackUrl());
+        _ValidateSessionNotifyTip();
+
+        // TeachingTip has no Opened event, and its content can't take focus
+        // until it has been laid out, which can take more than one pass (see
+        // the window renamer). Keep trying until focus moves into the tip.
+        _sessionNotifyLayoutUpdatedRevoker = SessionNotifyDelayBox().LayoutUpdated(winrt::auto_revoke, [weakThis = get_weak()](auto&&, auto&&) {
+            if (const auto page = weakThis.get(); page && page->SessionNotifyDelayBox().Focus(FocusState::Programmatic))
+            {
+                page->_sessionNotifyLayoutUpdatedRevoker.revoke();
+            }
+        });
+        _sessionNotifyPressedEnter = false;
+        SessionNotifyTip().IsOpen(true);
+    }
+
+    void TerminalPage::_SessionNotifyActionClick(const IInspectable&, const IInspectable&)
+    {
+        // The tip can't disable its button, so invalid input keeps it open
+        // with the error showing.
+        const auto url = _ValidateSessionNotifyTip();
+        if (!url)
+        {
+            return;
+        }
+        SessionNotifyTip().IsOpen(false);
+        // The tab may have closed while the tip was open.
+        const auto tab = _sessionNotifyTab.get();
+        uint32_t index;
+        if (!tab || !_tabs.IndexOf(tab, index))
+        {
+            return;
+        }
+
+        const auto delay = gsl::narrow_cast<uint32_t>(std::lround(SessionNotifyDelayBox().Value()));
+        const hstring callbackUrl{ *url };
+        const auto state = ApplicationState::SharedInstance();
+        state.SessionNotifyDelay(delay);
+        state.SessionNotifyCallbackUrl(callbackUrl);
+
+        std::erase_if(_sessionNotifications, [&](const auto& item) {
+            return item.tab == tab;
+        });
+        _sessionNotifications.push_back({ tab, SessionFinishNotifier{ delay * 1000ull, !callbackUrl.empty() }, delay, callbackUrl });
+        _sessionNotificationTimer.Start();
+        _RefreshSessionDrawer();
+    }
+
+    // Returns the normalized callback URL, empty for none, when both fields
+    // are valid, and shows the URL error to match.
+    std::optional<std::wstring> TerminalPage::_ValidateSessionNotifyTip()
+    {
+        const auto delayBox = SessionNotifyDelayBox();
+        const auto urlBox = SessionNotifyUrlBox();
+        const auto urlError = SessionNotifyUrlError();
+        // Change events can arrive while the tip is still loading.
+        if (!delayBox || !urlBox || !urlError)
+        {
+            return std::nullopt;
+        }
+
+        auto url = NormalizeCallbackUrl(urlBox.Text());
+        if (url && !url->empty())
+        {
+            try
+            {
+                std::ignore = Windows::Foundation::Uri{ *url };
+            }
+            catch (...)
+            {
+                url.reset();
+            }
+        }
+        urlError.Visibility(url ? Visibility::Collapsed : Visibility::Visible);
+
+        const auto delay = delayBox.Value();
+        const auto valid = url && !std::isnan(delay) && delay >= delayBox.Minimum() && delay <= delayBox.Maximum();
+        return valid ? url : std::nullopt;
+    }
+
+    void TerminalPage::_SessionNotifyDelayChanged(const IInspectable& sender, const MUX::Controls::NumberBoxValueChangedEventArgs& args)
+    {
+        // An emptied delay has no error to explain why the button does
+        // nothing, so it returns to its previous value instead.
+        if (std::isnan(args.NewValue()) && !std::isnan(args.OldValue()))
+        {
+            sender.as<MUX::Controls::NumberBox>().Value(args.OldValue());
+            return;
+        }
+        _ValidateSessionNotifyTip();
+    }
+
+    void TerminalPage::_SessionNotifyUrlChanged(const IInspectable&, const Controls::TextChangedEventArgs&)
+    {
+        _ValidateSessionNotifyTip();
+    }
+
+    // Like the window renamer, Enter commits only when both its key down and
+    // up reach the tip, so the Enter that chose the menu item can't commit.
+    void TerminalPage::_SessionNotifyKeyDown(const IInspectable&, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args)
+    {
+        if (args.OriginalKey() == VirtualKey::Enter)
+        {
+            _sessionNotifyPressedEnter = true;
+        }
+    }
+
+    void TerminalPage::_SessionNotifyKeyUp(const IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args)
+    {
+        const auto key = args.OriginalKey();
+        if (key == VirtualKey::Enter && _sessionNotifyPressedEnter)
+        {
+            _sessionNotifyPressedEnter = false;
+            _SessionNotifyActionClick(sender, nullptr);
+        }
+        else if (key == VirtualKey::Escape)
+        {
+            SessionNotifyTip().IsOpen(false);
+        }
+    }
+
+    void TerminalPage::_RefreshSessionDrawerLaunchers()
+    {
+        // Use profile identity, not tab titles, and include unfocused split panes.
+        // Keep the first three distinct profiles in tab/pane order.
+        std::vector<std::pair<guid, hstring>> profiles;
+        for (const auto& tab : _tabs)
+        {
+            if (profiles.size() == 3)
+            {
+                break;
+            }
+            if (const auto root = _GetTabImpl(tab)->GetRootPane())
+            {
+                root->WalkTree([&](const auto& pane) {
+                    if (profiles.size() < 3)
+                    {
+                        if (const auto profile = pane->GetProfile())
+                        {
+                            const auto id = profile.Guid();
+                            // A running session may outlive its settings profile.
+                            if (const auto current = _settings.FindProfile(id))
+                            {
+                                if (std::none_of(profiles.begin(), profiles.end(), [&](const auto& entry) { return entry.first == id; }))
+                                {
+                                    profiles.emplace_back(id, current.Name());
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Polling must not replace buttons while they have keyboard focus.
+        if (profiles == _sessionDrawerProfiles)
+        {
+            return;
+        }
+        _sessionDrawerProfiles = std::move(profiles);
+        const auto launchers = SessionDrawerLaunchers();
+        launchers.Children().Clear();
+        launchers.ColumnDefinitions().Clear();
+        launchers.Visibility(_sessionDrawerProfiles.empty() ? Visibility::Collapsed : Visibility::Visible);
+        for (const auto& [id, name] : _sessionDrawerProfiles)
+        {
+            ColumnDefinition column;
+            column.Width(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
+            launchers.ColumnDefinitions().Append(column);
+
+            const hstring label{ fmt::format(FMT_COMPILE(L"+ {}"), name) };
+            TextBlock text;
+            text.Text(label);
+            text.TextTrimming(TextTrimming::CharacterEllipsis);
+            Button button;
+            button.Content(text);
+            button.MinWidth(0);
+            button.Padding(Thickness{ 8, 8, 8, 8 });
+            button.HorizontalAlignment(HorizontalAlignment::Stretch);
+            const Windows::UI::Xaml::Input::PointerEventHandler showHandCursor{ [](auto&&, auto&&) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            } };
+            button.PointerEntered(showHandCursor);
+            // Buttons handle pointer movement internally; also observe handled
+            // events so the XAML Island cannot replace the hand cursor.
+            button.AddHandler(UIElement::PointerMovedEvent(), box_value(showHandCursor), true);
+            button.PointerExited([](auto&&, auto&&) {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            });
+            Automation::AutomationProperties::SetName(button, label);
+            ToolTipService::SetToolTip(button, box_value(label));
+            Grid::SetColumn(button, static_cast<int32_t>(launchers.Children().Size()));
+            button.Click([weakThis = get_weak(), id](auto&&, auto&&) {
+                if (const auto page = weakThis.get())
+                {
+                    if (page->_settings.FindProfile(id))
+                    {
+                        NewTerminalArgs args;
+                        args.Profile(::Microsoft::Console::Utils::GuidToString(id));
+                        LOG_IF_FAILED(page->_OpenNewTab(args));
+                    }
+                }
+            });
+            launchers.Children().Append(button);
+        }
+    }
+
+    void TerminalPage::_ResizeSessionDrawer(double delta)
+    {
+        const auto width = SessionWorkspace().ActualWidth() - SessionDividerColumn().ActualWidth();
+        if (width > 0)
+        {
+            _sessionDrawerFraction = std::clamp(_sessionDrawerFraction + delta / width, 0.10, 0.50);
+            MainSessionColumn().Width(GridLengthHelper::FromValueAndType(1.0 - _sessionDrawerFraction, GridUnitType::Star));
+            SessionDrawerColumn().Width(GridLengthHelper::FromValueAndType(_sessionDrawerFraction, GridUnitType::Star));
+        }
+    }
+
+    void TerminalPage::_SessionDrawerDragDelta(const IInspectable&, const Controls::Primitives::DragDeltaEventArgs& args)
+    {
+        _ResizeSessionDrawer(args.HorizontalChange());
+    }
+
+    void TerminalPage::_SessionDrawerResizeKeyDown(const IInspectable&, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args)
+    {
+        if (args.Key() == VirtualKey::Left || args.Key() == VirtualKey::Right)
+        {
+            _ResizeSessionDrawer(args.Key() == VirtualKey::Left ? -16.0 : 16.0);
+            args.Handled(true);
+        }
+        else if (args.Key() == VirtualKey::Escape || args.Key() == VirtualKey::Enter)
+        {
+            _FocusCurrentTab(false);
+            args.Handled(true);
+        }
     }
 
     Windows::UI::Xaml::Automation::Peers::AutomationPeer TerminalPage::OnCreateAutomationPeer()
@@ -3117,6 +4221,12 @@ namespace winrt::TerminalApp::implementation
         {
             if (const auto tabImpl{ _GetFocusedTabImpl() })
             {
+                if (widthOrHeight && _settings.GlobalSettings().ShowSessionDrawer() && _tabs.Size() > 1 && !_isInFocusMode && dimension > 14.0f)
+                {
+                    const auto mainFraction = _sessionDrawerCollapsed ? 1.0f : static_cast<float>(1.0 - _sessionDrawerFraction);
+                    const auto mainWidth = (dimension - 14.0f) * mainFraction;
+                    return tabImpl->CalcSnappedDimension(true, mainWidth) / mainFraction + 14.0f;
+                }
                 return tabImpl->CalcSnappedDimension(widthOrHeight, dimension);
             }
         }
@@ -4197,6 +5307,8 @@ namespace winrt::TerminalApp::implementation
 
         _showTabsFullscreen = _currentWindowSettings().ShowTabsFullscreen();
 
+        _UpdateSessionDrawerVisibility();
+
         // Settings AllowDependentAnimations will affect whether animations are
         // enabled application-wide, so we don't need to check it each time we
         // want to create an animation.
@@ -4347,6 +5459,7 @@ namespace winrt::TerminalApp::implementation
     void TerminalPage::WindowVisibilityChanged(const bool showOrHide)
     {
         _visible = showOrHide;
+        _UpdateSessionDrawerVisibility();
         for (const auto& tab : _tabs)
         {
             if (auto tabImpl{ _GetTabImpl(tab) })
@@ -4397,6 +5510,7 @@ namespace winrt::TerminalApp::implementation
         if (newInFocusMode != FocusMode())
         {
             _isInFocusMode = newInFocusMode;
+            _UpdateSessionDrawerVisibility();
             _UpdateTabView();
             FocusModeChanged.raise(*this, nullptr);
         }
@@ -5422,6 +6536,12 @@ namespace winrt::TerminalApp::implementation
         _updateThemeColors();
 
         _adjustProcessPriorityThrottled->Run();
+
+        // Returning to the window shows the user its focused tab.
+        if (activated && !_sessionNotifications.empty())
+        {
+            _SessionUserActivity(_GetFocusedTab());
+        }
 
         if (const auto& tab{ _GetFocusedTabImpl() })
         {

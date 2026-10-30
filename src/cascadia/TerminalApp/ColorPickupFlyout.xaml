@@ -20,7 +20,8 @@
     <StackPanel Orientation="Horizontal">
         <StackPanel XYFocusKeyboardNavigation="Enabled">
             <Grid Padding="-2">
-                <VariableSizedWrapGrid Margin="0"
+                <VariableSizedWrapGrid x:Name="PresetColors"
+                                       Margin="0"
                                        HorizontalAlignment="Center"
                                        MaximumRowsOrColumns="4"
                                        Orientation="Horizontal">

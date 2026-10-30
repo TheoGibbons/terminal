@@ -28,7 +28,8 @@ Author(s):
     X(winrt::Windows::Foundation::Collections::IVector<winrt::hstring>, DisabledProfileSources, "disabledProfileSources", nullptr) \
     X(bool, AllowHeadless, "compatibility.allowHeadless", false)                                                                   \
     X(bool, EnableColorSelection, "experimental.enableColorSelection", false)                                                      \
-    X(bool, EnableTabDragDrop, "enableTabDragDrop", true)
+    X(bool, EnableTabDragDrop, "enableTabDragDrop", true)                                                                          \
+    X(bool, ShowSessionDrawer, "experimental.showSessionDrawer", true)
 
 // Settings that are per-window (may vary by window name in the future)
 #define MTSM_WINDOW_SETTINGS(X)                                                                                                                                                                       \

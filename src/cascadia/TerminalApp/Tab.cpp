@@ -118,8 +118,12 @@ namespace winrt::TerminalApp::implementation
     // - sender, e: not used
     void Tab::_BellIndicatorTimerTick(const Windows::Foundation::IInspectable& /*sender*/, const Windows::Foundation::IInspectable& /*e*/)
     {
-        ShowBellIndicator(false);
         _bellIndicatorTimer.Stop();
+        // An alert must remain pending if focus moved away during its timeout.
+        if (_focused())
+        {
+            ShowBellIndicator(false);
+        }
     }
 
     // Method Description:
@@ -343,6 +347,7 @@ namespace winrt::TerminalApp::implementation
     {
         ASSERT_UI_THREAD();
 
+        const auto wasFocused = _focused();
         _focusState = focusState;
 
         if (_focused())
@@ -356,7 +361,7 @@ namespace winrt::TerminalApp::implementation
                 _UpdateProgressState();
             }
             // When we gain focus, remove the bell indicator if it is active
-            if (_tabStatus.BellIndicator())
+            if (!wasFocused && _tabStatus.BellIndicator())
             {
                 ShowBellIndicator(false);
             }
@@ -472,7 +477,24 @@ namespace winrt::TerminalApp::implementation
     {
         ASSERT_UI_THREAD();
 
+        _bellIndicatorTimer.Stop();
         _tabStatus.BellIndicator(show);
+        if (show && _focused())
+        {
+            ActivateBellIndicatorTimer();
+        }
+    }
+
+    // Keep activity on the tab so rebuilding drawer cards cannot lose a transition.
+    void Tab::UpdateSessionPreviewActivity(const bool working)
+    {
+        ASSERT_UI_THREAD();
+
+        if (_sessionPreviewWorking && !working)
+        {
+            ShowBellIndicator(true);
+        }
+        _sessionPreviewWorking = working;
     }
 
     // Method Description:
@@ -484,7 +506,7 @@ namespace winrt::TerminalApp::implementation
 
         if (!_bellIndicatorTimer)
         {
-            _bellIndicatorTimer.Interval(std::chrono::milliseconds(2000));
+            _bellIndicatorTimer.Interval(std::chrono::seconds(5));
             _bellIndicatorTimer.Tick({ get_weak(), &Tab::_BellIndicatorTimerTick });
         }
 
@@ -1192,14 +1214,6 @@ namespace winrt::TerminalApp::implementation
 
                     // Show the bell indicator in the tab header
                     tab->ShowBellIndicator(true);
-
-                    // If this tab is focused, activate the bell indicator timer, which will
-                    // remove the bell indicator once it fires
-                    // (otherwise, the indicator is removed when the tab gets focus)
-                    if (tab->_focusState != WUX::FocusState::Unfocused)
-                    {
-                        tab->ActivateBellIndicatorTimer();
-                    }
                 }
             });
 
@@ -1450,9 +1464,10 @@ namespace winrt::TerminalApp::implementation
                         tab->_RecalculateAndApplyTabColor();
                     }
                 }
+                const auto wasFocused = tab->_focused();
                 tab->_focusState = WUX::FocusState::Programmatic;
                 // This tab has gained focus, remove the bell indicator if it is active
-                if (tab->_tabStatus.BellIndicator())
+                if (!wasFocused && tab->_tabStatus.BellIndicator())
                 {
                     tab->ShowBellIndicator(false);
                 }

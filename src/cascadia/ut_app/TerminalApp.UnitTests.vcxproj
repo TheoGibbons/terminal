@@ -23,6 +23,9 @@
   <ItemGroup>
     <ClCompile Include="JsonUtilsTests.cpp" />
     <ClCompile Include="FzfTests.cpp" />
+    <ClCompile Include="ShellIntegrationTests.cpp" />
+    <ClCompile Include="SessionFinishNotifierTests.cpp" />
+    <ClCompile Include="SessionActivityTests.cpp" />
     <ClCompile Include="precomp.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -47,7 +50,7 @@
       <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>WindowsApp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>WindowsApp.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <!--
       SettingsModelLib contains a DllMain that we need to force the use of.
       If you don't have this, then you'll see an error like

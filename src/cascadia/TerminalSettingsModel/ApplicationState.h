@@ -44,7 +44,9 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
     X(FileSource::Local, Windows::Foundation::Collections::IVector<hstring>, AllowedCommandlines, "allowedCommandlines")                                                  \
     X(FileSource::Local, std::unordered_set<hstring>, DismissedBadges, "dismissedBadges")                                                                                 \
     X(FileSource::Local, Windows::Foundation::Collections::IMap<hstring COMMA Model::WindowLayout>, PersistedWorkspaces, "persistedWorkspaces")                           \
-    X(FileSource::Shared, bool, SSHFolderGenerated, "sshFolderGenerated", false)
+    X(FileSource::Shared, bool, SSHFolderGenerated, "sshFolderGenerated", false)                                                                                          \
+    X(FileSource::Local, winrt::hstring, SessionNotifyCallbackUrl, "sessionNotifyCallbackUrl")                                                                            \
+    X(FileSource::Local, uint32_t, SessionNotifyDelay, "sessionNotifyDelay", 30u)
 
     struct WindowLayout : WindowLayoutT<WindowLayout>
     {

@@ -179,6 +179,8 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         static Windows::UI::Xaml::Thickness ParseThicknessFromPadding(const hstring padding);
 
         hstring ReadEntireBuffer() const;
+        hstring ReadViewportRows(int32_t rowCount) const;
+        Windows::Foundation::Collections::IVectorView<Control::PreviewTextRun> ReadViewportText(int32_t rowCount) const;
         Control::CommandHistoryContext CommandHistory() const;
         void UpdateWinGetSuggestions(Windows::Foundation::Collections::IVector<hstring> suggestions);
 

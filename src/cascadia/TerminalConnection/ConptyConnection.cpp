@@ -8,6 +8,7 @@
 #include <winmeta.h>
 
 #include "CTerminalHandoff.h"
+#include "ShellIntegration.h"
 #include "../../types/inc/utils.hpp"
 
 #include "ConptyConnection.g.cpp"
@@ -161,6 +162,7 @@ namespace winrt::Microsoft::Terminal::TerminalConnection::implementation
         }
 
         auto [newCommandLine, newStartingDirectory] = Utils::MangleStartingDirectoryForWSL(cmdline, _startingDirectory);
+        newCommandLine = ::Microsoft::Terminal::ShellIntegration::PrepareCommandline(newCommandLine);
         const auto startingDirectory = newStartingDirectory.size() > 0 ? newStartingDirectory.c_str() : nullptr;
 
         THROW_IF_WIN32_BOOL_FALSE(CreateProcessW(

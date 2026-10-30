@@ -2417,6 +2417,11 @@
           "description": "When set to true, the window is created on top of all other windows. If multiple windows are all \"always on top\", the most recently focused one will be the topmost",
           "type": "boolean"
         },
+        "experimental.showSessionDrawer": {
+          "default": true,
+          "description": "Show a resizable left sidebar with read-only live previews of the bottom ten visible rows of each tab. Available in the session drawer fork.",
+          "type": "boolean"
+        },
         "alwaysShowTabs": {
           "default": true,
           "description": "When set to true, tabs are always displayed. When set to false and \"showTabsInTitlebar\" is set to false, tabs only appear after opening a new tab.",

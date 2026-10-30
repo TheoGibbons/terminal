@@ -151,6 +151,8 @@ namespace Microsoft.Terminal.Control
         void SetReadOnly(Boolean readOnlyState);
 
         String ReadEntireBuffer();
+        String ReadViewportRows(Int32 rowCount);
+        Windows.Foundation.Collections.IVectorView<PreviewTextRun> ReadViewportText(Int32 rowCount);
         CommandHistoryContext CommandHistory();
         void UpdateWinGetSuggestions(Windows.Foundation.Collections.IVector<String> suggestions);
 

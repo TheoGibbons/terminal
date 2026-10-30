@@ -2453,6 +2453,97 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         return hstring{ str };
     }
 
+    // Copy the last text-bearing rows in the current viewport. Full-screen TUIs
+    // often leave a large empty area between their output and bottom input bar;
+    // do not let that space, separators, or empty prompts consume the preview's
+    // line budget. Keep physical wrapping and indentation without moving the
+    // viewport or selection. The active buffer also covers TUIs using the
+    // alternate buffer.
+    hstring ControlCore::ReadViewportRows(int32_t rowCount) const
+    {
+        std::wstring text;
+        for (const auto& run : ReadViewportText(rowCount))
+        {
+            text.append(run.Text == L"\n" ? L"\r\n" : std::wstring_view{ run.Text });
+        }
+        return hstring{ text };
+    }
+
+    std::vector<Control::PreviewTextRun> ControlCore::ReadViewportText(int32_t rowCount) const
+    {
+        if (!_initializedTerminal || _IsClosing() || rowCount <= 0)
+        {
+            return {};
+        }
+
+        const auto lock = _terminal->LockForReading();
+        const auto viewport = _terminal->GetViewport();
+        const auto& buffer = _terminal->GetTextBuffer();
+        const auto count = std::min(rowCount, viewport.Height());
+        // Claude pads its input prompt with a non-breaking space.
+        static constexpr std::wstring_view padding{ L" \t\u00a0" };
+        std::vector<std::pair<const ROW*, size_t>> rows;
+        rows.reserve(count);
+        for (auto y = viewport.BottomExclusive(); y > viewport.Top() && rows.size() < static_cast<size_t>(count);)
+        {
+            const auto& bufferRow = buffer.GetRowByOffset(--y);
+            const auto row = bufferRow.GetText();
+            const auto end = row.find_last_not_of(padding);
+            if (end != decltype(row)::npos)
+            {
+                const auto trimmed = row.substr(0, end + 1);
+                const auto content = trimmed.substr(trimmed.find_first_not_of(padding));
+                const auto separator = content.size() >= 3 && content.find_first_not_of(L"-\u2500\u2501") == decltype(row)::npos;
+                const auto emptyPrompt = content.size() == 1 && content.find_first_of(L">\u203a\u276f") != decltype(row)::npos;
+                if (!separator && !emptyPrompt)
+                {
+                    rows.emplace_back(&bufferRow, trimmed.size());
+                }
+            }
+        }
+
+        const auto& renderSettings = _terminal->GetRenderSettings();
+        const auto [defaultForeground, defaultBackground] = _terminal->GetAttributeColors({});
+        const auto reversed = renderSettings.GetRenderMode(::Microsoft::Console::Render::RenderSettings::Mode::ScreenReversed);
+        const auto toColor = [](COLORREF value) {
+            return Windows::UI::Color{ 255, GetRValue(value), GetGValue(value), GetBValue(value) };
+        };
+        std::vector<Control::PreviewTextRun> runs;
+        for (auto row = rows.rbegin(); row != rows.rend(); ++row)
+        {
+            if (!runs.empty())
+            {
+                // LF keeps XAML text range offsets identical to UTF-16 string
+                // offsets. The plain-text API retains its CRLF convention.
+                runs.push_back({ L"\n", toColor(defaultForeground), toColor(defaultBackground), true, true, false });
+            }
+            const auto& [bufferRow, length] = *row;
+            til::CoordType column = 0;
+            for (const auto& [attr, columns] : bufferRow->Attributes().runs())
+            {
+                const auto nextColumn = column + columns;
+                const auto start = bufferRow->GetCharOffset(column);
+                if (start >= length)
+                {
+                    break;
+                }
+                const auto end = std::min<size_t>(bufferRow->GetCharOffset(nextColumn), length);
+                if (end > start)
+                {
+                    const auto [foreground, background] = _terminal->GetAttributeColors(attr);
+                    const auto swapped = attr.IsReverseVideo() != reversed;
+                    runs.push_back({ hstring{ bufferRow->GetText().substr(start, end - start) },
+                                     toColor(foreground), toColor(background),
+                                     attr.GetForeground().IsDefault() && !swapped && foreground == defaultForeground && !attr.IsInvisible(),
+                                     attr.BackgroundIsDefault() && !swapped,
+                                     attr.IsInvisible() || foreground == background });
+                }
+                column = nextColumn;
+            }
+        }
+        return runs;
+    }
+
     // Get all of our recent commands. This will only really work if the user has enabled shell integration.
     Control::CommandHistoryContext ControlCore::CommandHistory() const
     {

@@ -17,6 +17,8 @@
 #include "WindowListEntry.g.h"
 #include "WindowListRequest.g.h"
 #include "Toast.h"
+#include "SessionActivity.h"
+#include "SessionFinishNotifier.h"
 
 #include "WindowsPackageManagerFactory.h"
 
@@ -278,6 +280,68 @@ namespace winrt::TerminalApp::implementation
         Microsoft::UI::Xaml::Controls::TabView _tabView{ nullptr };
         TerminalApp::TabRowControl _tabRow{ nullptr };
         Windows::UI::Xaml::Controls::Grid _tabContent{ nullptr };
+        struct SessionPreview
+        {
+            winrt::TerminalApp::Tab tab{ nullptr };
+            Windows::UI::Xaml::Controls::Border frame{ nullptr };
+            Windows::UI::Xaml::Controls::Button button{ nullptr };
+            Windows::UI::Xaml::Controls::TextBlock title{ nullptr };
+            Windows::UI::Xaml::Controls::TextBlock workingDirectory{ nullptr };
+            Windows::UI::Xaml::Controls::TextBlock status{ nullptr };
+            Windows::UI::Xaml::Controls::FontIcon bell{ nullptr };
+            Windows::UI::Xaml::Controls::FontIcon notify{ nullptr };
+            Windows::UI::Xaml::Controls::TextBlock text{ nullptr };
+            std::vector<Microsoft::Terminal::Control::PreviewTextRun> textRuns;
+            std::optional<Windows::UI::Color> textBackgroundColor;
+            bool textUsesContrast{ false };
+            std::optional<Windows::UI::Color> backgroundColor;
+            bool bellHighlighted{ false };
+        };
+        std::vector<SessionPreview> _sessionPreviews;
+        std::vector<std::pair<winrt::guid, winrt::hstring>> _sessionDrawerProfiles;
+        SafeDispatcherTimer _sessionPreviewTimer;
+        double _sessionDrawerFraction{ 0.15 };
+        bool _sessionDrawerLoaded{ false };
+        bool _sessionDrawerCollapsed{ false };
+        winrt::TerminalApp::ColorPickupFlyout _sessionPreviewColorPicker{ nullptr };
+        // "Notify me when this finishes" requests outlive drawer cards, and
+        // keep following activity while the drawer is hidden.
+        struct SessionNotification
+        {
+            winrt::TerminalApp::Tab tab{ nullptr };
+            ::TerminalApp::SessionFinishNotifier notifier;
+            uint32_t delay;
+            winrt::hstring callbackUrl;
+        };
+        std::vector<SessionNotification> _sessionNotifications;
+        SafeDispatcherTimer _sessionNotificationTimer;
+        winrt::weak_ref<winrt::TerminalApp::Tab> _sessionNotifyTab;
+        winrt::Windows::UI::Xaml::FrameworkElement::LayoutUpdated_revoker _sessionNotifyLayoutUpdatedRevoker;
+        bool _sessionNotifyPressedEnter{ false };
+
+        void _InitializeSessionDrawer();
+        static ::TerminalApp::SessionActivity _SessionActivityDetected(const winrt::com_ptr<Tab>& tab, const Microsoft::Terminal::Control::TermControl& control, std::wstring_view snapshot);
+        static bool _SessionWorking(const winrt::com_ptr<Tab>& tab);
+        bool _SessionNotificationPending(const winrt::TerminalApp::Tab& tab) const;
+        void _CancelSessionNotification(const winrt::TerminalApp::Tab& tab);
+        void _SessionUserActivity(const winrt::TerminalApp::Tab& tab);
+        void _UpdateSessionNotifications();
+        void _NotifySessionFinished(const winrt::com_ptr<Tab>& tab, const SessionNotification& notification);
+        static safe_void_coroutine _SendSessionCallback(winrt::hstring url, winrt::hstring message);
+        void _ShowSessionNotifyTip(const winrt::TerminalApp::Tab& tab);
+        std::optional<std::wstring> _ValidateSessionNotifyTip();
+        void _SessionNotifyActionClick(const IInspectable& sender, const IInspectable& args);
+        void _SessionNotifyKeyDown(const IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args);
+        void _SessionNotifyKeyUp(const IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args);
+        void _SessionNotifyDelayChanged(const IInspectable& sender, const Microsoft::UI::Xaml::Controls::NumberBoxValueChangedEventArgs& args);
+        void _SessionNotifyUrlChanged(const IInspectable& sender, const Windows::UI::Xaml::Controls::TextChangedEventArgs& args);
+        void _UpdateSessionDrawerVisibility();
+        void _RefreshSessionDrawer();
+        void _RefreshSessionDrawerLaunchers();
+        void _ShowSessionPreviewColorPicker(const winrt::TerminalApp::Tab& tab);
+        void _ResizeSessionDrawer(double delta);
+        void _SessionDrawerDragDelta(const IInspectable& sender, const Windows::UI::Xaml::Controls::Primitives::DragDeltaEventArgs& args);
+        void _SessionDrawerResizeKeyDown(const IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args);
         Microsoft::UI::Xaml::Controls::SplitButton _newTabButton{ nullptr };
         Windows::UI::Xaml::Controls::MenuFlyout _workspaceFlyout{ nullptr };
         Windows::UI::Xaml::Controls::Button _workspaceDropdown{ nullptr };

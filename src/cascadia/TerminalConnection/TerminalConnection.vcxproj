@@ -27,6 +27,7 @@
     </ClInclude>
     <ClInclude Include="CTerminalHandoff.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ShellIntegration.h" />
     <ClInclude Include="ConptyConnection.h">
       <DependentUpon>ConptyConnection.idl</DependentUpon>
     </ClInclude>
@@ -93,7 +94,7 @@
       <AdditionalIncludeDirectories>$(IntDir)..\OpenConsoleProxy;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(OpenConsoleCommonOutDir)\conptylib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OpenConsoleCommonOutDir)\conptylib.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(SolutionDir)build\rules\CollectWildcardResources.targets" />

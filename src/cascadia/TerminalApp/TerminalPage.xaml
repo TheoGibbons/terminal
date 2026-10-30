@@ -13,6 +13,53 @@
       Background="Transparent"
       mc:Ignorable="d">
 
+    <Page.Resources>
+        <!--  Keep card colors on the control so bell highlighting also survives hover.  -->
+        <Style x:Key="SessionPreviewButtonStyle"
+               TargetType="Button">
+            <Setter Property="Background" Value="{ThemeResource ButtonBackground}" />
+            <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter x:Name="CardContent"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Background="{TemplateBinding Background}"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          CornerRadius="{TemplateBinding CornerRadius}"
+                                          Foreground="{TemplateBinding Foreground}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="CardContent.Opacity" Value="0.9" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="CardContent.Opacity" Value="0.8" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="CardContent.Opacity" Value="0.5" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </ContentPresenter>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Page.Resources>
+
     <Grid x:Name="Root"
           Background="Transparent">
         <Grid.RowDefinitions>
@@ -42,13 +89,89 @@
             </mux:InfoBar>
         </StackPanel>
 
-        <Grid x:Name="TabContent"
-              Grid.Row="2"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-            <Grid.Background>
-                <ImageBrush />
-            </Grid.Background>
+        <Grid x:Name="SessionWorkspace"
+              Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SessionDrawerColumn"
+                                  Width="15*" />
+                <ColumnDefinition x:Name="SessionDividerColumn"
+                                  Width="14" />
+                <ColumnDefinition x:Name="MainSessionColumn"
+                                  Width="85*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="TabContent"
+                  Grid.Column="2"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch">
+                <Grid.Background>
+                    <ImageBrush />
+                </Grid.Background>
+            </Grid>
+
+            <Grid x:Name="SessionDrawerControls"
+                  Grid.Column="1"
+                  Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+                <Thumb x:Name="SessionDrawerDivider"
+                       x:Uid="SessionDrawerDivider"
+                       Width="6"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Stretch"
+                       BorderThickness="1"
+                       DragDelta="_SessionDrawerDragDelta"
+                       IsTabStop="True"
+                       KeyDown="_SessionDrawerResizeKeyDown"
+                       UseSystemFocusVisuals="True">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                                    BackgroundSizing="OuterBorderEdge"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <Border Width="2"
+                                        HorizontalAlignment="Center"
+                                        Background="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                            </Border>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+                <Button x:Name="SessionDrawerToggle"
+                        Width="14"
+                        Height="28"
+                        MinWidth="0"
+                        MinHeight="0"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+                    <FontIcon x:Name="SessionDrawerToggleIcon"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              FontSize="10"
+                              Glyph="&#xE76B;" />
+                </Button>
+            </Grid>
+
+            <Grid x:Name="SessionDrawer"
+                  Grid.Column="0"
+                  Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ScrollViewer x:Name="SessionDrawerScroll"
+                              HorizontalContentAlignment="Stretch"
+                              HorizontalScrollBarVisibility="Disabled"
+                              HorizontalScrollMode="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="SessionDrawerCards"
+                                Margin="6"
+                                Spacing="6" />
+                </ScrollViewer>
+                <Grid x:Name="SessionDrawerLaunchers"
+                      Grid.Row="1"
+                      Margin="6"
+                      ColumnSpacing="6"
+                      Visibility="Collapsed" />
+            </Grid>
         </Grid>
 
         <!--
@@ -140,6 +263,42 @@
                      FontFamily="Cascadia Mono" />
             </TextBlock>
         </ContentDialog>
+
+        <!--  Not a ContentDialog: in XAML Islands, its text boxes receive no key presses.  -->
+        <mux:TeachingTip x:Name="SessionNotifyTip"
+                         x:Uid="SessionNotifyTip"
+                         x:Load="False"
+                         ActionButtonClick="_SessionNotifyActionClick"
+                         ActionButtonStyle="{ThemeResource AccentButtonStyle}"
+                         IsLightDismissEnabled="True">
+            <mux:TeachingTip.Content>
+                <StackPanel x:Name="SessionNotifyPanel"
+                            Spacing="12">
+                    <mux:NumberBox x:Name="SessionNotifyDelayBox"
+                                   x:Uid="SessionNotifyDelayBox"
+                                   LargeChange="30"
+                                   Maximum="3600"
+                                   Minimum="0"
+                                   SmallChange="5"
+                                   SpinButtonPlacementMode="Inline"
+                                   ValueChanged="_SessionNotifyDelayChanged" />
+                    <TextBox x:Name="SessionNotifyUrlBox"
+                             x:Uid="SessionNotifyUrlBox"
+                             InputScope="Url"
+                             IsSpellCheckEnabled="False"
+                             TextChanged="_SessionNotifyUrlChanged">
+                        <TextBox.ContextFlyout>
+                            <mtu:TextMenuFlyout />
+                        </TextBox.ContextFlyout>
+                    </TextBox>
+                    <TextBlock x:Name="SessionNotifyUrlError"
+                               x:Uid="SessionNotifyUrlError"
+                               Foreground="{ThemeResource ErrorTextBrush}"
+                               TextWrapping="WrapWholeWords"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </mux:TeachingTip.Content>
+        </mux:TeachingTip>
 
         <local:CommandPalette x:Name="CommandPaletteElement"
                               Grid.Row="2"

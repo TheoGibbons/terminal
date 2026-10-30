@@ -47,6 +47,7 @@ namespace winrt::TerminalApp::implementation
 
         void ShowBellIndicator(const bool show);
         void ActivateBellIndicatorTimer();
+        void UpdateSessionPreviewActivity(const bool working);
 
         float CalcSnappedDimension(const bool widthOrHeight, const float dimension) const;
         std::optional<winrt::Microsoft::Terminal::Settings::Model::SplitDirection> PreCalculateCanSplit(winrt::Microsoft::Terminal::Settings::Model::SplitDirection splitType,
@@ -129,6 +130,9 @@ namespace winrt::TerminalApp::implementation
         WINRT_PROPERTY(uint32_t, TabViewIndex, 0);
         // The TabViewNumTabs is the number of Tab objects in TerminalPage's _tabs vector.
         WINRT_PROPERTY(uint32_t, TabViewNumTabs, 0);
+
+        // Runtime-only drawer appearance, retained when preview controls rebuild.
+        WINRT_PROPERTY(std::optional<winrt::Windows::UI::Color>, SessionPreviewColor);
 
         WINRT_OBSERVABLE_PROPERTY(winrt::hstring, Title, PropertyChanged.raise);
         WINRT_OBSERVABLE_PROPERTY(winrt::hstring, Icon, PropertyChanged.raise);
@@ -214,6 +218,7 @@ namespace winrt::TerminalApp::implementation
         void _Setup();
 
         SafeDispatcherTimer _bellIndicatorTimer;
+        bool _sessionPreviewWorking{ false };
         void _BellIndicatorTimerTick(const Windows::Foundation::IInspectable& sender, const Windows::Foundation::IInspectable& e);
 
         void _UpdateHeaderControlMaxWidth(const winrt::Microsoft::Terminal::Settings::Model::WindowSettings& windowSettings);
