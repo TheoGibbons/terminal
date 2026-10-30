@@ -49,6 +49,16 @@ namespace Microsoft.Terminal.Control
         Boolean EndAtRightBoundary;
     };
 
+    struct PreviewTextRun
+    {
+        String Text;
+        Windows.UI.Color Foreground;
+        Windows.UI.Color Background;
+        Boolean ForegroundIsDefault;
+        Boolean BackgroundIsDefault;
+        Boolean IsHidden;
+    };
+
     struct SearchRequest
     {
         String Text;

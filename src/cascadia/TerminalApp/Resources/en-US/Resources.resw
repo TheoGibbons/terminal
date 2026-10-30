@@ -1006,4 +1006,110 @@ For example, 'wt -p "Ubuntu" -d C:\' is equivalent to 'wt new-tab -p "Ubuntu" -d
 For all available options, run 'wt new-tab --help'.</value>
     <comment>{Locked="wt","new-tab","-p","-d","--help"}</comment>
   </data>
+  <data name="SessionDrawerDivider.[using:Windows.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Resize session drawer</value>
+  </data>
+  <data name="SessionDrawerDivider.[using:Windows.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Drag to resize, or click the divider then press Left/Right. Press Esc or Enter to return to the terminal.</value>
+  </data>
+  <data name="SessionDrawerDivider.[using:Windows.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Click the divider, then press Left or Right to resize. Press Escape or Enter to return to the terminal.</value>
+  </data>
+  <data name="SessionDrawerHide" xml:space="preserve">
+    <value>Hide session drawer</value>
+  </data>
+  <data name="SessionDrawerShow" xml:space="preserve">
+    <value>Show session drawer</value>
+  </data>
+  <data name="SessionDrawerBell" xml:space="preserve">
+    <value>Bell notification</value>
+  </data>
+  <data name="SessionDrawerClosed" xml:space="preserve">
+    <value>Connection closed</value>
+  </data>
+  <data name="SessionDrawerActive" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="SessionDrawerLive" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="SessionDrawerNoTerminal" xml:space="preserve">
+    <value>No terminal in the focused pane</value>
+  </data>
+  <data name="SessionDrawerBackgroundColor" xml:space="preserve">
+    <value>Preview background color…</value>
+  </data>
+  <data name="SessionPreviewCharcoal" xml:space="preserve">
+    <value>Charcoal</value>
+  </data>
+  <data name="SessionPreviewSlate" xml:space="preserve">
+    <value>Slate</value>
+  </data>
+  <data name="SessionPreviewBlue" xml:space="preserve">
+    <value>Muted blue</value>
+  </data>
+  <data name="SessionPreviewTeal" xml:space="preserve">
+    <value>Muted teal</value>
+  </data>
+  <data name="SessionPreviewGreen" xml:space="preserve">
+    <value>Muted green</value>
+  </data>
+  <data name="SessionPreviewPlum" xml:space="preserve">
+    <value>Muted plum</value>
+  </data>
+  <data name="SessionPreviewRose" xml:space="preserve">
+    <value>Muted rose</value>
+  </data>
+  <data name="SessionPreviewBrown" xml:space="preserve">
+    <value>Muted brown</value>
+  </data>
+  <data name="SessionDrawerNotify" xml:space="preserve">
+    <value>Notify me when this finishes…</value>
+    <comment>Session drawer context menu item. Opens a dialog to request a notification when the tab's activity stops.</comment>
+  </data>
+  <data name="SessionDrawerCancelNotify" xml:space="preserve">
+    <value>Cancel finish notification</value>
+    <comment>Session drawer context menu item shown while a finish notification is pending for the tab.</comment>
+  </data>
+  <data name="SessionDrawerNotifyPending" xml:space="preserve">
+    <value>Finish notification pending</value>
+    <comment>Tooltip and accessible name for the speaker icon on a session drawer card.</comment>
+  </data>
+  <data name="SessionNotifyTip.Title" xml:space="preserve">
+    <value>Notify me when this finishes</value>
+  </data>
+  <data name="SessionNotifyTip.ActionButtonContent" xml:space="preserve">
+    <value>Notify me</value>
+  </data>
+  <data name="SessionNotifyTip.CloseButtonContent" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SessionNotifyTip.Subtitle" xml:space="preserve">
+    <value>When activity in this tab stops for the delay, Terminal shows a notification and plays a sound. A callback URL then receives a POST request after the same delay again. Typing, clicking, scrolling, or switching to this tab after it stops cancels both.</value>
+  </data>
+  <data name="SessionNotifyDelayBox.Header" xml:space="preserve">
+    <value>Delay (seconds)</value>
+  </data>
+  <data name="SessionNotifyUrlBox.Header" xml:space="preserve">
+    <value>Callback URL (optional)</value>
+  </data>
+  <data name="SessionNotifyUrlBox.PlaceholderText" xml:space="preserve">
+    <value>https://ntfy.sh/your-topic</value>
+    <comment>{Locked}</comment>
+  </data>
+  <data name="SessionNotifyUrlError.Text" xml:space="preserve">
+    <value>Enter an http or https URL, or leave this empty.</value>
+  </data>
+  <data name="SessionNotifyToast" xml:space="preserve">
+    <value>"{0}" finished.</value>
+    <comment>{0} is the tab title. Body of the desktop notification shown when a tab's activity stops.</comment>
+  </data>
+  <data name="SessionNotifyToastCallback" xml:space="preserve">
+    <value>"{0}" finished. The callback URL will be called in {1} seconds unless you return to this tab.</value>
+    <comment>{0} is the tab title, {1} is a number of seconds. Body of the desktop notification shown when a tab's activity stops.</comment>
+  </data>
+  <data name="SessionNotifyCallbackMessage" xml:space="preserve">
+    <value>"{0}" finished in {1}.</value>
+    <comment>{0} is the tab title, {1} is the application name. Sent as the body of the callback URL request.</comment>
+  </data>
 </root>

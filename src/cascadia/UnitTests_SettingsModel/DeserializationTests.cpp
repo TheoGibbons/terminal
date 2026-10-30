@@ -28,6 +28,7 @@ namespace SettingsModelUnitTests
         TEST_METHOD(ValidateDuplicateProfiles);
         TEST_METHOD(ValidateManyWarnings);
         TEST_METHOD(LayerGlobalProperties);
+        TEST_METHOD(SessionDrawerSetting);
         TEST_METHOD(ValidateProfileOrdering);
         TEST_METHOD(ValidateHideProfiles);
         TEST_METHOD(TestReorderWithNullGuids);
@@ -380,6 +381,25 @@ namespace SettingsModelUnitTests
         VERIFY_ARE_EQUAL(240, settings->WindowSettingsDefaults().InitialCols());
         VERIFY_ARE_EQUAL(60, settings->WindowSettingsDefaults().InitialRows());
         VERIFY_ARE_EQUAL(false, settings->WindowSettingsDefaults().ShowTabsInTitlebar());
+    }
+
+    void DeserializationTests::SessionDrawerSetting()
+    {
+        auto globals = winrt::make_self<implementation::GlobalAppSettings>();
+        VERIFY_IS_TRUE(globals->ShowSessionDrawer());
+        VERIFY_IS_FALSE(globals->HasShowSessionDrawer());
+
+        globals->LayerJson(VerifyParseSucceeded(R"({"experimental.showSessionDrawer": false})"), OriginTag::User);
+        VERIFY_IS_FALSE(globals->ShowSessionDrawer());
+        VERIFY_IS_TRUE(globals->HasShowSessionDrawer());
+        VERIFY_IS_FALSE(globals->ToJson()["experimental.showSessionDrawer"].asBool());
+        VERIFY_IS_FALSE(globals->Copy()->ShowSessionDrawer());
+
+        globals->LayerJson(VerifyParseSucceeded(R"({"experimental.showSessionDrawer": true})"), OriginTag::User);
+        VERIFY_IS_TRUE(globals->ShowSessionDrawer());
+        globals->ClearShowSessionDrawer();
+        VERIFY_IS_FALSE(globals->HasShowSessionDrawer());
+        VERIFY_IS_TRUE(globals->ShowSessionDrawer());
     }
 
     void DeserializationTests::ValidateProfileOrdering()

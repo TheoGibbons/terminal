@@ -1098,6 +1098,7 @@ namespace winrt::TerminalApp::implementation
         {
             _tabContent.Children().Clear();
             _tabContent.Children().Append(tab.Content());
+            _SessionUserActivity(tab);
 
             // GH#7409: If the tab switcher is open, then we _don't_ want to
             // automatically focus the new tab here. The tab switcher wants

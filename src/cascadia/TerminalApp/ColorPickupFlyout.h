@@ -6,6 +6,7 @@ namespace winrt::TerminalApp::implementation
     struct ColorPickupFlyout : ColorPickupFlyoutT<ColorPickupFlyout>
     {
         ColorPickupFlyout();
+        explicit ColorPickupFlyout(bool mutedPalette);
 
         void ColorButton_Click(const Windows::Foundation::IInspectable& sender, const Windows::UI::Xaml::RoutedEventArgs& args);
         void ShowColorPickerButton_Click(const Windows::Foundation::IInspectable& sender, const Windows::UI::Xaml::RoutedEventArgs& args);

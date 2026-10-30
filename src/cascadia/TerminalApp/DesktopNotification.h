@@ -20,6 +20,11 @@ namespace winrt::TerminalApp::implementation
         winrt::hstring Title;
         winrt::hstring Message;
         winrt::hstring Tag;
+        // The user explicitly asked for this notification, so it bypasses rate
+        // limiting and registers unpackaged builds to show toasts.
+        bool Requested{ false };
+        // The caller plays its own sound.
+        bool Silent{ false };
     };
 
     class DesktopNotification
@@ -29,6 +34,8 @@ namespace winrt::TerminalApp::implementation
         static void SendNotification(const DesktopNotificationArgs& args, std::function<void()> activatedFunc);
 
     private:
+        static void _RegisterUnpackagedAumid(const wchar_t* aumid);
+
         static std::atomic<uint64_t> _lastNotificationTime;
 
         // Minimum interval between notifications, in milliseconds (GetTickCount64 units).

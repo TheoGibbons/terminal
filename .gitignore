@@ -25,6 +25,9 @@ bld/
 objfre/
 objchk/
 
+# Local build output and portable builds
+/build/local/
+
 # Visual Studio 2015 cache/options directory
 .vs/
 

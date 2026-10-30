@@ -3633,6 +3633,15 @@ namespace winrt::Microsoft::Terminal::Control::implementation
     {
         return _core->ReadEntireBuffer();
     }
+
+    hstring TermControl::ReadViewportRows(int32_t rowCount) const
+    {
+        return _core->ReadViewportRows(rowCount);
+    }
+    Windows::Foundation::Collections::IVectorView<Control::PreviewTextRun> TermControl::ReadViewportText(int32_t rowCount) const
+    {
+        return winrt::single_threaded_vector<Control::PreviewTextRun>(_core->ReadViewportText(rowCount)).GetView();
+    }
     Control::CommandHistoryContext TermControl::CommandHistory() const
     {
         return _core->CommandHistory();

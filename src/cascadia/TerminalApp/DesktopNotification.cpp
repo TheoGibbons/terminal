@@ -46,7 +46,7 @@ namespace winrt::TerminalApp::implementation
     {
         try
         {
-            if (!ShouldSendNotification())
+            if (!args.Requested && !ShouldSendNotification())
             {
                 return;
             }
@@ -80,6 +80,13 @@ namespace winrt::TerminalApp::implementation
 
             toastElement.SetAttribute(L"scenario", L"default");
 
+            if (args.Silent)
+            {
+                auto audio = toastXml.CreateElement(L"audio");
+                audio.SetAttribute(L"silent", L"true");
+                toastElement.AppendChild(audio);
+            }
+
             auto toast = ToastNotification{ toastXml };
 
             // Set the tag and group to enable notification replacement.
@@ -110,6 +117,10 @@ namespace winrt::TerminalApp::implementation
                 wil::unique_cotaskmem_string aumid;
                 if (SUCCEEDED(GetCurrentProcessExplicitAppUserModelID(&aumid)))
                 {
+                    if (args.Requested)
+                    {
+                        _RegisterUnpackagedAumid(aumid.get());
+                    }
                     notifier = ToastNotificationManager::CreateToastNotifier(aumid.get());
                 }
             }
@@ -124,6 +135,29 @@ namespace winrt::TerminalApp::implementation
             // are disabled, or the app is unpackaged without proper AUMID setup), we silently
             // ignore the error.
             LOG_CAUGHT_EXCEPTION();
+        }
+    }
+
+    // Method Description:
+    // - Windows shows toasts from an unpackaged app only when its AUMID is
+    //   known to the shell, through a Start menu shortcut or this per-user
+    //   registration. Portable builds have no shortcut.
+    void DesktopNotification::_RegisterUnpackagedAumid(const wchar_t* aumid)
+    {
+        static std::atomic<bool> registered{ false };
+        if (registered.exchange(true))
+        {
+            return;
+        }
+
+        const auto keyPath = fmt::format(FMT_COMPILE(L"Software\\Classes\\AppUserModelId\\{}"), aumid);
+        wil::unique_hkey key;
+        LOG_IF_WIN32_ERROR_MSG(RegCreateKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, key.put(), nullptr), "Failed to register toast AUMID");
+        if (key)
+        {
+            const auto name = winrt::Microsoft::Terminal::Settings::Model::CascadiaSettings::ApplicationDisplayName();
+            const auto bytes = gsl::narrow<DWORD>((name.size() + 1) * sizeof(wchar_t));
+            LOG_IF_WIN32_ERROR(RegSetValueExW(key.get(), L"DisplayName", 0, REG_SZ, reinterpret_cast<const BYTE*>(name.c_str()), bytes));
         }
     }
 }

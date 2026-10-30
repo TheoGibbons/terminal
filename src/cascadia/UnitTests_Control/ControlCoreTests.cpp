@@ -37,6 +37,16 @@ namespace ControlUnitTests
         TEST_METHOD(TestClearScreen);
         TEST_METHOD(TestClearAll);
         TEST_METHOD(TestReadEntireBuffer);
+        TEST_METHOD(TestReadViewportRows);
+        TEST_METHOD(TestReadViewportRowsAlternateBuffer);
+        TEST_METHOD(TestReadViewportRowsWrappedLines);
+        TEST_METHOD(TestReadViewportRowsBounds);
+        TEST_METHOD(TestReadViewportRowsSparseScreen);
+        TEST_METHOD(TestReadViewportRowsIgnoresChrome);
+        TEST_METHOD(TestWorkingDirectoryUpdates);
+        TEST_METHOD(TestReadViewportTextColors);
+        TEST_METHOD(TestReadViewportTextAttributes);
+        TEST_METHOD(TestReadViewportTextUnicodeAndUpdates);
 
         TEST_METHOD(TestSelectCommandSimple);
         TEST_METHOD(TestSelectOutputSimple);
@@ -367,6 +377,236 @@ namespace ControlUnitTests
         Log::Comment(L"Check the buffer contents");
         VERIFY_ARE_EQUAL(L"This is some text\r\nwith varying amounts\r\nof whitespace\r\n",
                          core->ReadEntireBuffer());
+    }
+
+    void ControlCoreTests::TestReadViewportRows()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        VERIFY_ARE_EQUAL(L"", core->ReadViewportRows(10));
+        _standardInit(core);
+
+        // Build scrollback, then leave the terminal scrolled away from the live
+        // viewport. Reading a preview must preserve exactly what is on screen.
+        for (auto i = 0; i < 30; ++i)
+        {
+            const auto line = std::wstring{ L"row" } + std::to_wstring(i) + L"\r\n";
+            conn->WriteInput(winrt_wstring_to_array_view(line));
+        }
+        core->UserScrollViewport(0);
+        core->_terminal->SetSelectionAnchor({ 0, 0 });
+        core->_terminal->SetSelectionEnd({ 3, 0 });
+        const auto viewport = core->_terminal->GetViewport();
+        const auto cursor = core->_terminal->GetTextBuffer().GetCursor().GetPosition();
+        const auto selectionStart = core->_terminal->GetSelectionAnchor();
+        const auto selectionEnd = core->_terminal->GetSelectionEnd();
+        const auto offset = core->ScrollOffset();
+        const auto size = core->ViewportSize();
+
+        for (auto i = 0; i < 3; ++i)
+        {
+            VERIFY_ARE_EQUAL(L"row18\r\nrow19", core->ReadViewportRows(2));
+        }
+        VERIFY_ARE_EQUAL(viewport.Top(), core->_terminal->GetViewport().Top());
+        VERIFY_ARE_EQUAL(size.Width, core->ViewportSize().Width);
+        VERIFY_ARE_EQUAL(size.Height, core->ViewportSize().Height);
+        VERIFY_ARE_EQUAL(cursor, core->_terminal->GetTextBuffer().GetCursor().GetPosition());
+        VERIFY_ARE_EQUAL(offset, core->ScrollOffset());
+        VERIFY_IS_TRUE(core->HasSelection());
+        VERIFY_ARE_EQUAL(selectionStart, core->_terminal->GetSelectionAnchor());
+        VERIFY_ARE_EQUAL(selectionEnd, core->_terminal->GetSelectionEnd());
+    }
+
+    void ControlCoreTests::TestReadViewportRowsAlternateBuffer()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+        conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[20;1Hmain screen"));
+        conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[?1049h\x1b[19;1HWorking...\x1b[20;1HAllow edits?"));
+        VERIFY_ARE_EQUAL(L"Working...\r\nAllow edits?", core->ReadViewportRows(2));
+
+        // TUIs rewrite existing rows. A snapshot must replace old text rather
+        // than append output. Erased rows must disappear; Unicode must survive.
+        conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[19;1H\x1b[2K\x1b[20;1H\x1b[2K\u2713 \u4e16\u754c"));
+        VERIFY_ARE_EQUAL(L"\u2713 \u4e16\u754c", core->ReadViewportRows(2));
+        conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[?1049l"));
+        VERIFY_ARE_EQUAL(L"main screen", core->ReadViewportRows(1));
+        VERIFY_ARE_EQUAL(30, core->ViewportSize().Width);
+        VERIFY_ARE_EQUAL(20, core->ViewportSize().Height);
+    }
+
+    void ControlCoreTests::TestReadViewportRowsWrappedLines()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+        conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[19;1H123456789012345678901234567890tail"));
+        VERIFY_ARE_EQUAL(L"123456789012345678901234567890\r\ntail", core->ReadViewportRows(2));
+    }
+
+    void ControlCoreTests::TestReadViewportRowsBounds()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+        VERIFY_ARE_EQUAL(L"", core->ReadViewportRows(0));
+        VERIFY_ARE_EQUAL(L"", core->ReadViewportRows(-1));
+        // A blank screen has no preview content, even for an oversized request.
+        VERIFY_ARE_EQUAL(L"", core->ReadViewportRows(INT32_MAX));
+        core->Close();
+        VERIFY_ARE_EQUAL(L"", core->ReadViewportRows(10));
+    }
+
+    void ControlCoreTests::TestReadViewportRowsSparseScreen()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+
+        // Reproduce a TUI with its reply high on screen and its input/footer
+        // pinned to the bottom. The blank gap must not hide the reply.
+        const auto screen = L"\x1b[2J\x1b[2;1H> hi\x1b[4;1HHi! What would you like to\x1b[5;1Hwork on?"
+                            L"\x1b[18;1H> Ask Codex to do anything\x1b[20;1H  Model / project";
+        for (const auto alternate : { false, true })
+        {
+            if (alternate)
+            {
+                conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[?1049h"));
+            }
+            conn->WriteInput(winrt_wstring_to_array_view(screen));
+            VERIFY_ARE_EQUAL(L"> hi\r\nHi! What would you like to\r\nwork on?\r\n> Ask Codex to do anything\r\n  Model / project", core->ReadViewportRows(10));
+            VERIFY_ARE_EQUAL(L"> Ask Codex to do anything\r\n  Model / project", core->ReadViewportRows(2));
+
+            // Updates must remove a previously displayed reply, including when
+            // rows are overwritten with spaces rather than an erase sequence.
+            conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[4;1H\x1b[2K\x1b[5;1H                              "));
+            VERIFY_ARE_EQUAL(L"> hi\r\n> Ask Codex to do anything\r\n  Model / project", core->ReadViewportRows(10));
+        }
+    }
+
+    void ControlCoreTests::TestReadViewportRowsIgnoresChrome()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+
+        for (const auto alternate : { false, true })
+        {
+            if (alternate)
+            {
+                conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[?1049h"));
+            }
+            conn->WriteInput(winrt_wstring_to_array_view(
+                L"\x1b[2J\x1b[1;1HReply\r\n"
+                L"  --------------------  \r\n"
+                L"  \u2500\u2500\u2500\u2500\u2500\u2500  \r\n"
+                L"\u2501\u2501\u2501\r\n"
+                L"  >  \r\n  \u203a  \r\n  \u276f  \r\n"
+                L"  >\u00a0\r\n  \u203a\u00a0\r\n  \u276f\u00a0\r\n"
+                L"  > keep this\r\n  \u203a keep this\r\n  \u276f\u00a0keep this\r\n"
+                L"--- text ---\r\n--"));
+
+            // Chrome must not consume the row budget. Preserve text-bearing
+            // prompts, indentation, and dashes that are part of actual content.
+            VERIFY_ARE_EQUAL(L"Reply\r\n  > keep this\r\n  \u203a keep this\r\n  \u276f\u00a0keep this\r\n--- text ---\r\n--",
+                             core->ReadViewportRows(6));
+            VERIFY_ARE_EQUAL(L"--- text ---\r\n--", core->ReadViewportRows(2));
+
+            conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[2J\x1b[1;1H----------\r\n  \u276f\u00a0  \r\n\u2500\u2500\u2500\r\n\u00a0\u00a0"));
+            VERIFY_ARE_EQUAL(L"", core->ReadViewportRows(10));
+        }
+    }
+
+    void ControlCoreTests::TestReadViewportTextColors()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        VERIFY_IS_TRUE(core->ReadViewportText(10).empty());
+        _standardInit(core);
+        conn->WriteInput(winrt_wstring_to_array_view(
+            L"\x1b]4;1;rgb:91/23/45\x1b\\\x1b]4;9;rgb:fa/ab/bc\x1b\\"
+            L"D\x1b[31mR\x1b[91mB\x1b[38;5;196mP\x1b[38;2;12;34;56mT\x1b[0mD"));
+        const auto runs = core->ReadViewportText(10);
+        VERIFY_ARE_EQUAL(size_t{ 6 }, runs.size());
+        VERIFY_IS_TRUE(runs[0].ForegroundIsDefault);
+        VERIFY_IS_TRUE((runs[1].Foreground == winrt::Windows::UI::Color{ 255, 0x91, 0x23, 0x45 }));
+        VERIFY_IS_TRUE((runs[2].Foreground == winrt::Windows::UI::Color{ 255, 0xfa, 0xab, 0xbc }));
+        VERIFY_IS_TRUE((runs[3].Foreground == winrt::Windows::UI::Color{ 255, 255, 0, 0 }));
+        VERIFY_IS_TRUE((runs[4].Foreground == winrt::Windows::UI::Color{ 255, 12, 34, 56 }));
+        VERIFY_IS_FALSE(runs[4].ForegroundIsDefault);
+        VERIFY_IS_TRUE(runs[5].ForegroundIsDefault);
+        VERIFY_ARE_EQUAL(L"DRBPTD", core->ReadViewportRows(10));
+        VERIFY_IS_TRUE(core->ReadViewportText(0).empty());
+        VERIFY_IS_TRUE(core->ReadViewportText(-1).empty());
+        core->Close();
+        VERIFY_IS_TRUE(core->ReadViewportText(10).empty());
+    }
+
+    void ControlCoreTests::TestReadViewportTextAttributes()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+        conn->WriteInput(winrt_wstring_to_array_view(
+            L"\x1b[38;2;100;120;140mX\x1b[2mY\x1b[22;48;2;10;20;30;7mZ\x1b[0;8mH"));
+        const auto runs = core->ReadViewportText(10);
+        VERIFY_ARE_EQUAL(size_t{ 4 }, runs.size());
+        VERIFY_IS_TRUE((runs[0].Foreground == winrt::Windows::UI::Color{ 255, 100, 120, 140 }));
+        VERIFY_IS_TRUE((runs[1].Foreground == winrt::Windows::UI::Color{ 255, 50, 60, 70 }));
+        VERIFY_IS_TRUE((runs[2].Foreground == winrt::Windows::UI::Color{ 255, 10, 20, 30 }));
+        VERIFY_IS_TRUE((runs[2].Background == winrt::Windows::UI::Color{ 255, 100, 120, 140 }));
+        VERIFY_IS_FALSE(runs[2].BackgroundIsDefault);
+        VERIFY_IS_TRUE(runs[3].IsHidden);
+        VERIFY_IS_FALSE(runs[3].ForegroundIsDefault);
+        VERIFY_IS_TRUE(runs[3].BackgroundIsDefault);
+    }
+
+    void ControlCoreTests::TestReadViewportTextUnicodeAndUpdates()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+        for (const auto alternate : { false, true })
+        {
+            if (alternate)
+            {
+                conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[?1049h"));
+            }
+            conn->WriteInput(winrt_wstring_to_array_view(
+                L"\x1b[2J\x1b[1;1H\x1b[38;2;12;34;56m\u4e16\U0001f600e\u0301\x1b[0mZ"
+                L"\x1b[3;1H----------\x1b[4;1H  \u276f  \x1b[8;1H\x1b[38;2;100;120;140msecond"));
+            const auto before = core->ReadViewportText(2);
+            VERIFY_ARE_EQUAL(size_t{ 4 }, before.size());
+            VERIFY_ARE_EQUAL(L"\u4e16\U0001f600e\u0301", before[0].Text);
+            VERIFY_ARE_EQUAL(L"Z", before[1].Text);
+            VERIFY_ARE_EQUAL(L"\n", before[2].Text);
+            VERIFY_ARE_EQUAL(L"second", before[3].Text);
+            VERIFY_ARE_EQUAL(L"\u4e16\U0001f600e\u0301Z\r\nsecond", core->ReadViewportRows(2));
+
+            // A rewrite with identical text and different colours must change
+            // the snapshot, so the UI does not keep the old foreground.
+            conn->WriteInput(winrt_wstring_to_array_view(L"\x1b[8;1H\x1b[38;2;200;210;220msecond"));
+            const auto after = core->ReadViewportText(2);
+            VERIFY_ARE_EQUAL(before[3].Text, after[3].Text);
+            VERIFY_IS_TRUE(after[3].Foreground != before[3].Foreground);
+        }
+    }
+
+    void ControlCoreTests::TestWorkingDirectoryUpdates()
+    {
+        auto [settings, conn] = _createSettingsAndConnection();
+        auto core = createCore(*settings, *conn);
+        _standardInit(core);
+
+        // The same control must return fresh paths after every shell report,
+        // including WSL folders and mounted Windows drives.
+        for (const auto directory : { L"C:\\Windows", L"C:\\Program Files", L"\\\\wsl.localhost\\Ubuntu\\home\\test", L"\\\\wsl.localhost\\Ubuntu\\tmp", L"C:\\Windows" })
+        {
+            const auto report = std::wstring{ L"\x1b]9;9;" } + directory + L"\x1b\\";
+            conn->WriteInput(winrt_wstring_to_array_view(report));
+            VERIFY_ARE_EQUAL(std::wstring_view{ directory }, std::wstring_view{ core->WorkingDirectory() });
+        }
     }
 
     static void _writePrompt(const winrt::com_ptr<MockConnection>& conn, const std::wstring_view& path)
