@@ -106,6 +106,9 @@
     <Page Include="ColorPickupFlyout.xaml">
       <Filter>controls</Filter>
     </Page>
+    <Page Include="PaneNote.xaml">
+      <Filter>controls</Filter>
+    </Page>
     <Page Include="CommandPalette.xaml">
       <Filter>commandPalette</Filter>
     </Page>

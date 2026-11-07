@@ -1,6 +1,6 @@
 # Windows Terminal session drawer
 
-This local fork adds the left sidebar. Build and run this fork to use it; the installed Microsoft Store Terminal is not modified.
+This local fork adds the left sidebar and [pane notes](#pane-notes). Build and run this fork to use it; the installed Microsoft Store Terminal is not modified.
 
 - Use the slim arrow button centered vertically on the divider to hide the drawer, and the right arrow at the left edge to show it again. The button and its strip are 14 px wide. Reopening restores its previous width. The button supports keyboard activation and has a Show/Hide tooltip. This choice lasts for the current window; the drawer opens by default in a new window.
 - The drawer and divider appear only when the window has more than one tab, and hide again when one remains. The drawer starts directly with session cards, without a heading. The sidebar starts at 15% of the content width. The divider has an opaque background matching the drawer and shows a horizontal resize cursor on hover and during dragging. Drag it, or click the divider and press Left/Right, to resize it between 10% and 50%. The divider highlights while it has focus; Esc or Enter returns focus to the terminal.
@@ -22,6 +22,20 @@ The drawer is enabled by default in this fork. Disable it with this top-level se
 Previews preserve the terminal's ANSI, 256-colour, and RGB foreground and background colours, including dim and reverse-video text. Hidden text stays hidden. Cards use the terminal background unless a custom preview colour or bell highlight overrides it. Terminal graphics and app-specific Working/Finished/Needs Input hooks are not implemented. A scrolled tab's preview follows its visible viewport and leaves its scroll position intact.
 
 New interactive Windows PowerShell, PowerShell 7, and `wsl.exe` Bash sessions automatically report their working directory after each prompt. WSL launches support distribution names and the `--distribution-id` GUID option used by generated Ubuntu profiles. The launch wrapper loads the normal shell startup configuration, keeps custom prompts and existing Bash prompt hooks, and adds directory reporting in memory. It does not edit user profile files. WSL directories are reported as Windows paths (`C:\...` for mounted drives and `\\wsl.localhost\Ubuntu\...` for Linux folders). Existing sessions must be reopened to enable reporting. Explicit commands/scripts, unsupported shell options, and other shells keep their original launch behavior and need their own directory-reporting integration. Activity spinners in the cards use a bold 24 px glyph. Card headers reserve that glyph's height and width in idle and bell states, keeping the spinner-visible layout stable when activity changes.
+
+## Pane notes
+
+Every terminal pane has a small **+** button in its top right corner, in the gutter the terminal keeps for its scrollbar. Click it to open a note on top of the pane and write what the pane is for, such as `This is in a worktree called update-login`. The button becomes **−**; click it or press Esc to hide the note again, or press Tab to go back to the terminal and leave it showing. The note floats over the terminal, so it covers the top rows without resizing the terminal or reflowing its text, and it never grows past 60% of the pane. Key bindings for things like switching tabs, or the command palette, still work while typing in it. Keys for editing text, like Ctrl+V and the arrow keys, always stay in the note, and `paste`, `copy` and `sendInput` never run from it, so nothing typed or pasted in a note reaches the terminal.
+
+A hidden note turns its **+** button the accent colour, and hovering over the button shows the note's text. Notes stay with their pane through splits, swaps, zooming, and moving a pane or tab, including to another window. They're saved with the window layout, so they come back after a restart if `firstWindowPreference` restores your layout. Duplicating a tab or pane doesn't copy its note, since the copy is a new session.
+
+Turn notes off in **Settings > Personalization** under **Tabs and title bar**, or in `settings.json`. This hides existing notes rather than deleting them:
+
+```json
+"experimental.showPaneNotes": false
+```
+
+## Building and testing this fork
 
 Build with the Visual Studio/C++ prerequisites listed [below](#prerequisites), then use a PowerShell 7 developer shell:
 
@@ -66,6 +80,8 @@ For drawer scrolling, open enough tabs to require scrolling, scroll into the mid
 For the bottom buttons, open duplicate profiles and four distinct profiles, including one in an unfocused split pane. Confirm each profile appears once, at most three buttons appear, and closing every pane of a listed profile brings the next profile into the row. Click a button and activate it with Enter/Space to verify it opens the named profile in a new tab. Scroll the cards and resize the drawer to confirm the buttons stay at the bottom and long names have full tooltips.
 
 For the arrow button, resize the drawer, hide it, and show it again; confirm the width is restored and the main terminal fills the freed space while hidden. Check the arrow direction, Show/Hide tooltip, keyboard Enter/Space activation, and terminal input focus afterward. While collapsed, add/remove tabs, enter/leave focus mode, and toggle the drawer setting; the collapsed choice should survive and the button should appear only with multiple tabs, the drawer setting enabled, and focus mode off. Resize the window in both states with grid snapping enabled.
+
+For pane notes, run `DeserializationTests::PaneNote*`, then `smoke-pane-notes.ps1`, `pane-notes-leak-check.ps1` and `pane-notes-key-sweep.ps1` from `D:\CodexTemp\windows-terminal-drawer-build`. They drive an isolated copy of a portable build with real mouse and keyboard input, so they take the foreground while they run. The leak check runs a key logger in the pane and confirms that nothing typed or pasted in a note reaches the terminal, which matters because the note's text box edits text without marking keys as handled.
 
 For the preview context menu, right-click an inactive card and confirm it stays inactive. Choose a preset and a custom background colour, check text readability on light/dark colours and on hover, then use Clear. Set different colours on two cards, add/reorder/close another tab, enter/leave focus mode, and reduce to one tab before opening a second: each surviving tab should retain its colour. Ring a bell in a coloured tab and confirm its chosen colour returns when the notification clears. Use Close on an inactive card and confirm the correct tab closes; also check read-only/confirm-on-close prompts and cancel. Focus a card and use Shift+F10 to check keyboard access.
 

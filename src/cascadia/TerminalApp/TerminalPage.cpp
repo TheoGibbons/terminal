@@ -2909,6 +2909,89 @@ namespace winrt::TerminalApp::implementation
             TelemetryPrivacyDataTag(PDT_ProductAndServiceUsage));
     }
 
+    // Whether a key pressed in a text box is meant for that text box, whatever
+    // key binding it might also have. Only called without Alt or Win held.
+    static bool _isTextBoxKey(const VirtualKey key, const bool ctrl) noexcept
+    {
+        if (!ctrl)
+        {
+            // Typing and moving the caret. Function keys don't do either.
+            return key < VirtualKey::F1 || key > VirtualKey::F24;
+        }
+
+        switch (key)
+        {
+        case VirtualKey::A:
+        case VirtualKey::C:
+        case VirtualKey::V:
+        case VirtualKey::X:
+        case VirtualKey::Y:
+        case VirtualKey::Z:
+        case VirtualKey::Enter:
+        case VirtualKey::Back:
+        case VirtualKey::Delete:
+        case VirtualKey::Insert:
+        case VirtualKey::Left:
+        case VirtualKey::Right:
+        case VirtualKey::Up:
+        case VirtualKey::Down:
+        case VirtualKey::Home:
+        case VirtualKey::End:
+        case VirtualKey::PageUp:
+        case VirtualKey::PageDown:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Method Description:
+    // - Runs the key bindings for a key pressed in a pane's note, so that tabs and
+    //   panes can still be managed from there. They can't simply get every key that
+    //   the note's text box leaves unhandled, because it edits text without marking
+    //   keys as handled. Ctrl+V would paste into the note and also, through the paste
+    //   binding, into the terminal behind it, which may be running something.
+    void TerminalPage::_PaneNoteKeyDownHandler(const Windows::Foundation::IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& e)
+    {
+        const auto key = e.OriginalKey();
+        const auto modifiers = _GetPressedModifierKeys();
+        if (!modifiers.IsAltPressed() && !modifiers.IsWinPressed() && _isTextBoxKey(key, modifiers.IsCtrlPressed()))
+        {
+            return;
+        }
+
+        const auto vkey = gsl::narrow_cast<WORD>(key);
+        const auto scanCode = gsl::narrow_cast<WORD>(e.KeyStatus().ScanCode);
+        const auto actionMap = _settings.ActionMap();
+        if (actionMap && (vkey || scanCode))
+        {
+            const auto cmd = actionMap.GetActionByKeyChord({
+                modifiers.IsCtrlPressed(),
+                modifiers.IsAltPressed(),
+                modifiers.IsShiftPressed(),
+                modifiers.IsWinPressed(),
+                vkey,
+                scanCode,
+            });
+            if (cmd)
+            {
+                // Whatever keys these are bound to, the user is typing in the
+                // note. These would act on the terminal's text and input instead.
+                switch (cmd.ActionAndArgs().Action())
+                {
+                case ShortcutAction::PasteText:
+                case ShortcutAction::CopyText:
+                case ShortcutAction::SendInput:
+                    return;
+                default:
+                    break;
+                }
+            }
+        }
+
+        _KeyDownHandler(sender, e);
+    }
+
     // Method Description:
     // - Called when the users pressed keyBindings while CommandPaletteElement is open.
     // - As of GH#8480, this is also bound to the TabRowControl's KeyUp event.
@@ -4942,6 +5025,35 @@ namespace winrt::TerminalApp::implementation
         return term;
     }
 
+    TerminalApp::TerminalPaneContent TerminalPage::_MakeTerminalPaneContent(const Profile& profile,
+                                                                            const TermControl& control,
+                                                                            const NewTerminalArgs& newTerminalArgs)
+    {
+        auto paneContent{ winrt::make<TerminalPaneContent>(profile, _terminalSettingsCache, control) };
+
+        const auto note{ paneContent.Note() };
+        // Nothing else passes key bindings along for keys typed outside the terminal.
+        note.KeyDown({ get_weak(), &TerminalPage::_PaneNoteKeyDownHandler });
+        // The text box would type Ctrl+Tab as a tab character, so bindings have to see Tab before it does.
+        note.PreviewKeyDown([weakThis{ get_weak() }](const IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args) {
+            if (args.OriginalKey() == VirtualKey::Tab)
+            {
+                if (const auto page{ weakThis.get() })
+                {
+                    page->_PaneNoteKeyDownHandler(sender, args);
+                }
+            }
+        });
+        note.Visibility(_settings.GlobalSettings().ShowPaneNotes() ? Visibility::Visible : Visibility::Collapsed);
+        if (newTerminalArgs)
+        {
+            note.Text(newTerminalArgs.Note());
+            note.IsOpen(newTerminalArgs.NoteOpen());
+        }
+
+        return paneContent;
+    }
+
     // Method Description:
     // - Creates a pane and returns a shared_ptr to it
     // - The caller should handle where the pane goes after creation,
@@ -4970,7 +5082,7 @@ namespace winrt::TerminalApp::implementation
             // serialize the actual profile's GUID along with the content guid.
             const auto& profile = _settings.GetProfileForArgs(newTerminalArgs);
             const auto control = _AttachControlToContent(newTerminalArgs.ContentId());
-            auto paneContent{ winrt::make<TerminalPaneContent>(profile, _terminalSettingsCache, control) };
+            auto paneContent{ _MakeTerminalPaneContent(profile, control, newTerminalArgs) };
             return std::make_shared<Pane>(paneContent);
         }
 
@@ -5040,7 +5152,7 @@ namespace winrt::TerminalApp::implementation
             control.RestoreFromPath(path);
         }
 
-        auto paneContent{ winrt::make<TerminalPaneContent>(profile, _terminalSettingsCache, control) };
+        auto paneContent{ _MakeTerminalPaneContent(profile, control, newTerminalArgs) };
 
         auto resultPane = std::make_shared<Pane>(paneContent);
 
@@ -5048,7 +5160,7 @@ namespace winrt::TerminalApp::implementation
         {
             auto newControl = _CreateNewControlAndContent(controlSettings, debugConnection);
             // Split (auto) with the debug tap.
-            auto debugContent{ winrt::make<TerminalPaneContent>(profile, _terminalSettingsCache, newControl) };
+            auto debugContent{ _MakeTerminalPaneContent(profile, newControl, nullptr) };
             auto debugPane = std::make_shared<Pane>(debugContent);
 
             // Since we're doing this split directly on the pane (instead of going through Tab,

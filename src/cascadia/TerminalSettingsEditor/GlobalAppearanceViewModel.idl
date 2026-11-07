@@ -36,5 +36,6 @@ namespace Microsoft.Terminal.Settings.Editor
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(Boolean, MinimizeToNotificationArea);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(Boolean, ShowAdminShield);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(Boolean, EnableUnfocusedAcrylic);
+        PERMANENT_OBSERVABLE_PROJECTED_SETTING(Boolean, ShowPaneNotes);
     }
 }

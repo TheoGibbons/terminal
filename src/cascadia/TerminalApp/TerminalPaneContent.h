@@ -39,6 +39,7 @@ namespace winrt::TerminalApp::implementation
 
         winrt::Windows::UI::Xaml::FrameworkElement GetRoot();
         winrt::Microsoft::Terminal::Control::TermControl GetTermControl();
+        TerminalApp::PaneNote Note() const { return _note; }
         winrt::Windows::Foundation::Size MinimumSize();
         void Focus(winrt::Windows::UI::Xaml::FocusState reason = winrt::Windows::UI::Xaml::FocusState::Programmatic);
         void Close();
@@ -71,6 +72,9 @@ namespace winrt::TerminalApp::implementation
         // See BasicPaneEvents for most generic event definitions
 
     private:
+        // Hosts the terminal and, on top of it, the note.
+        winrt::Windows::UI::Xaml::Controls::Grid _root{ nullptr };
+        TerminalApp::PaneNote _note{ nullptr };
         winrt::Microsoft::Terminal::Control::TermControl _control{ nullptr };
         winrt::Microsoft::Terminal::TerminalConnection::ConnectionState _connectionState{ winrt::Microsoft::Terminal::TerminalConnection::ConnectionState::NotConnected };
         winrt::Microsoft::Terminal::Settings::Model::Profile _profile{ nullptr };
@@ -94,6 +98,9 @@ namespace winrt::TerminalApp::implementation
         } _controlEvents;
         void _setupControlEvents();
         void _removeControlEvents();
+        void _setupNote();
+        void _noteReturnFocusRequested(const winrt::Windows::Foundation::IInspectable& sender, const winrt::Windows::Foundation::IInspectable& args);
+        void _rootSizeChanged(const winrt::Windows::Foundation::IInspectable& sender, const winrt::Windows::UI::Xaml::SizeChangedEventArgs& args);
 
         safe_void_coroutine _controlConnectionStateChangedHandler(const winrt::Windows::Foundation::IInspectable& sender, const winrt::Windows::Foundation::IInspectable& /*args*/);
         void _controlWarningBellHandler(const winrt::Windows::Foundation::IInspectable& sender,

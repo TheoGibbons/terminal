@@ -4,6 +4,7 @@
 #include "pch.h"
 
 #include "../TerminalSettingsModel/ColorScheme.h"
+#include "../TerminalSettingsModel/ActionArgs.h"
 #include "../TerminalSettingsModel/CascadiaSettings.h"
 #include "../TerminalSettingsModel/resource.h"
 #include "JsonTestClass.h"
@@ -29,6 +30,8 @@ namespace SettingsModelUnitTests
         TEST_METHOD(ValidateManyWarnings);
         TEST_METHOD(LayerGlobalProperties);
         TEST_METHOD(SessionDrawerSetting);
+        TEST_METHOD(PaneNotesSetting);
+        TEST_METHOD(PaneNoteArgs);
         TEST_METHOD(ValidateProfileOrdering);
         TEST_METHOD(ValidateHideProfiles);
         TEST_METHOD(TestReorderWithNullGuids);
@@ -400,6 +403,45 @@ namespace SettingsModelUnitTests
         globals->ClearShowSessionDrawer();
         VERIFY_IS_FALSE(globals->HasShowSessionDrawer());
         VERIFY_IS_TRUE(globals->ShowSessionDrawer());
+    }
+
+    void DeserializationTests::PaneNotesSetting()
+    {
+        auto globals = winrt::make_self<implementation::GlobalAppSettings>();
+        VERIFY_IS_TRUE(globals->ShowPaneNotes());
+        VERIFY_IS_FALSE(globals->HasShowPaneNotes());
+
+        globals->LayerJson(VerifyParseSucceeded(R"({"experimental.showPaneNotes": false})"), OriginTag::User);
+        VERIFY_IS_FALSE(globals->ShowPaneNotes());
+        VERIFY_IS_TRUE(globals->HasShowPaneNotes());
+        VERIFY_IS_FALSE(globals->ToJson()["experimental.showPaneNotes"].asBool());
+        VERIFY_IS_FALSE(globals->Copy()->ShowPaneNotes());
+
+        globals->ClearShowPaneNotes();
+        VERIFY_IS_FALSE(globals->HasShowPaneNotes());
+        VERIFY_IS_TRUE(globals->ShowPaneNotes());
+    }
+
+    void DeserializationTests::PaneNoteArgs()
+    {
+        // A note reaches a restored or moved pane by going through this JSON.
+        const auto json = VerifyParseSucceeded(R"({ "note": "Worktree: update-login\nSecond line", "noteOpen": true })");
+        const auto args = implementation::NewTerminalArgs::FromJson(json);
+        VERIFY_ARE_EQUAL(L"Worktree: update-login\nSecond line", args.Note());
+        VERIFY_IS_TRUE(args.NoteOpen());
+
+        const auto roundTripped = implementation::NewTerminalArgs::FromJson(implementation::NewTerminalArgs::ToJson(args));
+        VERIFY_ARE_EQUAL(args.Note(), roundTripped.Note());
+        VERIFY_IS_TRUE(roundTripped.NoteOpen());
+
+        const auto copied = winrt::get_self<implementation::NewTerminalArgs>(args)->Copy();
+        VERIFY_ARE_EQUAL(args.Note(), copied.Note());
+        VERIFY_IS_TRUE(copied.NoteOpen());
+
+        // Panes without a note leave no trace of one in the saved layout.
+        const auto empty = implementation::NewTerminalArgs::ToJson(winrt::make<implementation::NewTerminalArgs>());
+        VERIFY_IS_FALSE(empty.isMember("note"));
+        VERIFY_IS_FALSE(empty.isMember("noteOpen"));
     }
 
     void DeserializationTests::ValidateProfileOrdering()

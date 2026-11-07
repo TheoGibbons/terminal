@@ -155,6 +155,16 @@
                       Style="{StaticResource ComboBoxSettingStyle}" />
         </local:SettingsCard>
 
+        <!--  Show pane notes  -->
+        <local:SettingsCard x:Name="ShowPaneNotes"
+                            x:Uid="Globals_ShowPaneNotes">
+            <local:SettingsCard.HeaderIcon>
+                <FontIcon Glyph="&#xE70B;" />
+            </local:SettingsCard.HeaderIcon>
+            <ToggleSwitch IsOn="{x:Bind ViewModel.ShowPaneNotes, Mode=TwoWay}"
+                          Style="{StaticResource ToggleSwitchInExpanderStyle}" />
+        </local:SettingsCard>
+
         <!--  Section: Window behavior  -->
         <TextBlock x:Uid="Globals_Section_WindowBehavior"
                    Style="{StaticResource TextBlockSubHeaderStyle}" />

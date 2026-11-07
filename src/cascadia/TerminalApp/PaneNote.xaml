@@ -1,0 +1,138 @@
+<!--
+    Copyright (c) Microsoft Corporation. All rights reserved. Licensed under
+    the MIT License. See LICENSE in the project root for license information.
+-->
+<UserControl x:Class="TerminalApp.PaneNote"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mtu="using:Microsoft.Terminal.UI"
+             HorizontalAlignment="Stretch"
+             VerticalAlignment="Top"
+             Loaded="_Loaded"
+             Tapped="_Tapped">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <!--
+                These sit on top of whatever the terminal is showing, in whatever
+                colors its scheme uses, so they all have to be opaque.
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="PaneNoteBackground"
+                                     Color="#FF2B2B2B" />
+                    <SolidColorBrush x:Key="PaneNoteBorder"
+                                     Color="#FF505050" />
+                    <SolidColorBrush x:Key="PaneNoteHiddenBackground"
+                                     Color="{StaticResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="PaneNoteHiddenForeground"
+                                     Color="#FF000000" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="PaneNoteBackground"
+                                     Color="#FFF9F9F9" />
+                    <SolidColorBrush x:Key="PaneNoteBorder"
+                                     Color="#FFC8C8C8" />
+                    <SolidColorBrush x:Key="PaneNoteHiddenBackground"
+                                     Color="{StaticResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="PaneNoteHiddenForeground"
+                                     Color="#FFFFFFFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <StaticResource x:Key="PaneNoteBackground"
+                                    ResourceKey="SystemColorWindowColorBrush" />
+                    <StaticResource x:Key="PaneNoteBorder"
+                                    ResourceKey="SystemColorWindowTextColorBrush" />
+                    <StaticResource x:Key="PaneNoteHiddenBackground"
+                                    ResourceKey="SystemColorHighlightColorBrush" />
+                    <StaticResource x:Key="PaneNoteHiddenForeground"
+                                    ResourceKey="SystemColorHighlightTextColorBrush" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ToggleStates">
+                <!--  An empty, closed note: keep out of the way until the pointer comes near.  -->
+                <VisualState x:Name="Quiet" />
+                <VisualState x:Name="Prominent">
+                    <VisualState.Setters>
+                        <Setter Target="ToggleChrome.Opacity" Value="1" />
+                    </VisualState.Setters>
+                </VisualState>
+                <!--  A closed note with text in it. Visible at a glance, so it isn't forgotten.  -->
+                <VisualState x:Name="HiddenNote">
+                    <VisualState.Setters>
+                        <Setter Target="ToggleChrome.Opacity" Value="1" />
+                        <Setter Target="ToggleChrome.Background" Value="{ThemeResource PaneNoteHiddenBackground}" />
+                        <Setter Target="ToggleChrome.BorderBrush" Value="{ThemeResource PaneNoteHiddenBackground}" />
+                        <Setter Target="ToggleIcon.Foreground" Value="{ThemeResource PaneNoteHiddenForeground}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Border x:Name="NotePanel"
+                Margin="4,4,20,0"
+                Background="{ThemeResource PaneNoteBackground}"
+                BorderBrush="{ThemeResource PaneNoteBorder}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Visibility="Collapsed">
+            <TextBox x:Name="NoteBox"
+                     x:Uid="PaneNoteBox"
+                     MinHeight="60"
+                     AcceptsReturn="True"
+                     AutomationProperties.AutomationId="PaneNoteBox"
+                     BorderThickness="0"
+                     FontSize="13"
+                     IsSpellCheckEnabled="False"
+                     IsTextPredictionEnabled="False"
+                     KeyDown="_NoteBoxKeyDown"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     TextChanged="_NoteBoxTextChanged"
+                     TextWrapping="Wrap">
+                <TextBox.ContextFlyout>
+                    <mtu:TextMenuFlyout />
+                </TextBox.ContextFlyout>
+            </TextBox>
+        </Border>
+
+        <!--
+            The terminal keeps a 16px gutter along its right edge for the scrollbar.
+            Staying inside it means the toggle never covers text, or the close
+            button of the search box, which is aligned to the gutter's left edge.
+        -->
+        <Border x:Name="ToggleChrome"
+                Width="16"
+                Height="20"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Background="{ThemeResource PaneNoteBackground}"
+                BorderBrush="{ThemeResource PaneNoteBorder}"
+                BorderThickness="1"
+                CornerRadius="2"
+                Opacity="0.6">
+            <Button x:Name="ToggleButton"
+                    MinWidth="0"
+                    MinHeight="0"
+                    Padding="0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    AllowFocusOnInteraction="False"
+                    AutomationProperties.AutomationId="PaneNoteToggle"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="_ToggleClicked"
+                    IsTabStop="False"
+                    PointerEntered="_TogglePointerEntered"
+                    PointerExited="_TogglePointerExited">
+                <FontIcon x:Name="ToggleIcon"
+                          FontSize="9"
+                          Glyph="&#xE710;" />
+            </Button>
+        </Border>
+    </Grid>
+</UserControl>

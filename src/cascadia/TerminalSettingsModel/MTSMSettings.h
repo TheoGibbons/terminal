@@ -29,7 +29,8 @@ Author(s):
     X(bool, AllowHeadless, "compatibility.allowHeadless", false)                                                                   \
     X(bool, EnableColorSelection, "experimental.enableColorSelection", false)                                                      \
     X(bool, EnableTabDragDrop, "enableTabDragDrop", true)                                                                          \
-    X(bool, ShowSessionDrawer, "experimental.showSessionDrawer", true)
+    X(bool, ShowSessionDrawer, "experimental.showSessionDrawer", true)                                                             \
+    X(bool, ShowPaneNotes, "experimental.showPaneNotes", true)
 
 // Settings that are per-window (may vary by window name in the future)
 #define MTSM_WINDOW_SETTINGS(X)                                                                                                                                                                       \

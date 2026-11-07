@@ -973,12 +973,18 @@ bool Pane::IsConnectionClosed() const
 // Return Value:
 // - <none>
 void Pane::_ContentGotFocusHandler(const winrt::Windows::Foundation::IInspectable& sender,
-                                   const RoutedEventArgs& /* args */)
+                                   const RoutedEventArgs& args)
 {
     auto f = FocusState::Programmatic;
     if (const auto o = sender.try_as<winrt::Windows::UI::Xaml::Controls::Control>())
     {
         f = o.FocusState();
+    }
+    // The content's root can be a panel, which can't hold focus itself: a terminal
+    // pane's root hosts the terminal and its note. Ask the element that got focus.
+    else if (const auto source = args.OriginalSource().try_as<winrt::Windows::UI::Xaml::Controls::Control>())
+    {
+        f = source.FocusState();
     }
     GotFocus.raise(shared_from_this(), f);
 }

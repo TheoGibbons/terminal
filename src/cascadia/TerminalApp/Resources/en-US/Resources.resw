@@ -1108,6 +1108,22 @@ For all available options, run 'wt new-tab --help'.</value>
     <value>"{0}" finished. The callback URL will be called in {1} seconds unless you return to this tab.</value>
     <comment>{0} is the tab title, {1} is a number of seconds. Body of the desktop notification shown when a tab's activity stops.</comment>
   </data>
+  <data name="PaneNoteBox.PlaceholderText" xml:space="preserve">
+    <value>What is this pane doing?</value>
+    <comment>Placeholder for a free-form text area the user can show on top of a terminal pane, to remember what that pane is for.</comment>
+  </data>
+  <data name="PaneNoteAdd" xml:space="preserve">
+    <value>Add a note to this pane</value>
+    <comment>Tooltip for a button that opens an empty note on top of a terminal pane.</comment>
+  </data>
+  <data name="PaneNoteHide" xml:space="preserve">
+    <value>Hide this note</value>
+    <comment>Tooltip for a button that hides the note showing on top of a terminal pane. The text of the note is kept.</comment>
+  </data>
+  <data name="PaneNoteShow" xml:space="preserve">
+    <value>Show this note</value>
+    <comment>Name read by screen readers for a button that shows the hidden note of a terminal pane.</comment>
+  </data>
   <data name="SessionNotifyCallbackMessage" xml:space="preserve">
     <value>"{0}" finished in {1}.</value>
     <comment>{0} is the tab title, {1} is the application name. Sent as the body of the callback URL request.</comment>

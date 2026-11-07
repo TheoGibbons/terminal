@@ -193,6 +193,11 @@ namespace Microsoft.Terminal.Settings.Model
 
         UInt64 ContentId{ get; set; };
 
+        // The text of a pane's note, and whether it's showing. Like SessionId,
+        // these describe one running pane rather than what to launch.
+        String Note;
+        Boolean NoteOpen;
+
         String ToCommandline();
     };
 

@@ -3,6 +3,7 @@
 
 import "IPaneContent.idl";
 import "FilteredCommand.idl";
+import "PaneNote.idl";
 
 namespace TerminalApp
 {
@@ -13,6 +14,8 @@ namespace TerminalApp
         void MarkAsDefterm();
 
         Microsoft.Terminal.Settings.Model.Profile GetProfile();
+
+        PaneNote Note { get; };
 
         event Windows.Foundation.TypedEventHandler<TerminalPaneContent, Object> RestartTerminalRequested;
     }

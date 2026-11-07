@@ -2422,6 +2422,11 @@
           "description": "Show a resizable left sidebar with read-only live previews of the bottom ten visible rows of each tab. Available in the session drawer fork.",
           "type": "boolean"
         },
+        "experimental.showPaneNotes": {
+          "default": true,
+          "description": "Add a button to the top right of each terminal pane that opens a note you can write in. Available in the session drawer fork.",
+          "type": "boolean"
+        },
         "alwaysShowTabs": {
           "default": true,
           "description": "When set to true, tabs are always displayed. When set to false and \"showTabsInTitlebar\" is set to false, tabs only appear after opening a new tab.",

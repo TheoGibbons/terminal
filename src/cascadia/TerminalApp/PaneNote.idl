@@ -1,0 +1,17 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
+namespace TerminalApp
+{
+    [default_interface] runtimeclass PaneNote : Windows.UI.Xaml.Controls.UserControl
+    {
+        PaneNote();
+
+        String Text;
+        Boolean IsOpen;
+        void SetMaxNoteHeight(Double height);
+
+        // Raised when the user is done with the note and wants to get back to the terminal.
+        event Windows.Foundation.TypedEventHandler<PaneNote, Object> ReturnFocusRequested;
+    }
+}

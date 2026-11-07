@@ -6,6 +6,7 @@
 
 #include <mmsystem.h>
 
+#include "PaneNote.h"
 #include "TerminalSettingsCache.h"
 #include "../../types/inc/utils.hpp"
 
@@ -28,6 +29,31 @@ namespace winrt::TerminalApp::implementation
         _profile{ profile }
     {
         _setupControlEvents();
+        _setupNote();
+    }
+
+    void TerminalPaneContent::_setupNote()
+    {
+        _note = winrt::make<implementation::PaneNote>();
+        _note.ReturnFocusRequested({ get_weak(), &TerminalPaneContent::_noteReturnFocusRequested });
+
+        // The note has no background of its own, so wherever it isn't drawing
+        // anything, the pointer goes straight through to the terminal below.
+        _root = winrt::Windows::UI::Xaml::Controls::Grid{};
+        _root.Children().Append(_control);
+        _root.Children().Append(_note);
+        _root.SizeChanged({ get_weak(), &TerminalPaneContent::_rootSizeChanged });
+    }
+
+    void TerminalPaneContent::_noteReturnFocusRequested(const IInspectable&, const IInspectable&)
+    {
+        _control.Focus(winrt::Windows::UI::Xaml::FocusState::Programmatic);
+    }
+
+    void TerminalPaneContent::_rootSizeChanged(const IInspectable&, const winrt::Windows::UI::Xaml::SizeChangedEventArgs& args)
+    {
+        // However long a note gets, it mustn't hide the bottom of the pane, where the prompt usually is.
+        _note.SetMaxNoteHeight(args.NewSize().Height * 0.6);
     }
 
     void TerminalPaneContent::_setupControlEvents()
@@ -51,7 +77,7 @@ namespace winrt::TerminalApp::implementation
 
     winrt::Windows::UI::Xaml::FrameworkElement TerminalPaneContent::GetRoot()
     {
-        return _control;
+        return _root;
     }
     winrt::Microsoft::Terminal::Control::TermControl TerminalPaneContent::GetTermControl()
     {
@@ -145,6 +171,20 @@ namespace winrt::TerminalApp::implementation
         }
         default:
             break;
+        }
+
+        // A moved or restored pane is still the same session, so it keeps its
+        // note. A duplicate is a new session the note may not be true of.
+        if (kind != BuildStartupKind::None)
+        {
+            if (const auto note = _note.Text(); !note.empty())
+            {
+                args.Note(note);
+                if (_note.IsOpen())
+                {
+                    args.NoteOpen(true);
+                }
+            }
         }
 
         return args;
@@ -313,6 +353,9 @@ namespace winrt::TerminalApp::implementation
         // Reload our profile from the settings model to propagate bell mode, icon, and close on exit mode (anything that uses _profile).
         const auto profile{ settings.FindProfile(_profile.Guid()) };
         _profile = profile ? profile : settings.ProfileDefaults();
+
+        // Turning notes off only hides them, so turning them on again brings them back.
+        _note.Visibility(settings.GlobalSettings().ShowPaneNotes() ? winrt::Windows::UI::Xaml::Visibility::Visible : winrt::Windows::UI::Xaml::Visibility::Collapsed);
 
         if (const auto settings{ _cache->TryLookup(_profile) })
         {

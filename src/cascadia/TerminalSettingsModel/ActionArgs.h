@@ -391,10 +391,14 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
         ACTION_ARG(winrt::guid, SessionId, winrt::guid{});
         ACTION_ARG(bool, AppendCommandLine, false);
         ACTION_ARG(uint64_t, ContentId);
+        ACTION_ARG(winrt::hstring, Note, L"");
+        ACTION_ARG(bool, NoteOpen, false);
 
         static constexpr std::string_view SessionIdKey{ "sessionId" };
         static constexpr std::string_view AppendCommandLineKey{ "appendCommandLine" };
         static constexpr std::string_view ContentKey{ "__content" };
+        static constexpr std::string_view NoteKey{ "note" };
+        static constexpr std::string_view NoteOpenKey{ "noteOpen" };
 
     public:
         NewTerminalArgs(int32_t& profileIndex) :
@@ -439,6 +443,8 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
             JsonUtils::GetValueForKey(json, ElevateKey, args->_Elevate);
             JsonUtils::GetValueForKey(json, ReloadEnvironmentVariablesKey, args->_ReloadEnvironmentVariables);
             JsonUtils::GetValueForKey(json, ContentKey, args->_ContentId);
+            JsonUtils::GetValueForKey(json, NoteKey, args->_Note);
+            JsonUtils::GetValueForKey(json, NoteOpenKey, args->_NoteOpen);
             return *args;
         }
         static Json::Value ToJson(const Model::NewTerminalArgs& val)
@@ -461,6 +467,8 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
             JsonUtils::SetValueForKey(json, ElevateKey, args->_Elevate);
             JsonUtils::SetValueForKey(json, ReloadEnvironmentVariablesKey, args->_ReloadEnvironmentVariables);
             JsonUtils::SetValueForKey(json, ContentKey, args->_ContentId);
+            JsonUtils::SetValueForKey(json, NoteKey, args->_Note);
+            JsonUtils::SetValueForKey(json, NoteOpenKey, args->_NoteOpen);
             return json;
         }
         Model::NewTerminalArgs Copy() const
@@ -478,6 +486,8 @@ namespace winrt::Microsoft::Terminal::Settings::Model::implementation
             copy->_Elevate = _Elevate;
             copy->_ReloadEnvironmentVariables = _ReloadEnvironmentVariables;
             copy->_ContentId = _ContentId;
+            copy->_Note = _Note;
+            copy->_NoteOpen = _NoteOpen;
             return *copy;
         }
         size_t Hash() const
