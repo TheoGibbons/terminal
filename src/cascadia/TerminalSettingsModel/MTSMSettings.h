@@ -30,6 +30,7 @@ Author(s):
     X(bool, EnableColorSelection, "experimental.enableColorSelection", false)                                                      \
     X(bool, EnableTabDragDrop, "enableTabDragDrop", true)                                                                          \
     X(bool, ShowSessionDrawer, "experimental.showSessionDrawer", true)                                                             \
+    X(int32_t, SessionDrawerMinimumTabs, "experimental.sessionDrawerMinimumTabs", 1)                                              \
     X(bool, ShowPaneNotes, "experimental.showPaneNotes", true)
 
 // Settings that are per-window (may vary by window name in the future)

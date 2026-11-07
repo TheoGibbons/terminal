@@ -586,6 +586,14 @@
     <value>Compact will shrink inactive tabs to the size of the icon.</value>
     <comment>A description for what the "tab width mode" setting does. Presented near "Globals_TabWidthMode.Header". 'Compact' must match the value for &lt;Globals_TabWidthModeCompact.Content&gt;.</comment>
   </data>
+  <data name="Globals_ShowSessionDrawer.Header" xml:space="preserve">
+    <value>Show session drawer</value>
+    <comment>Header for a control to toggle the session drawer, a sidebar with a live preview of each open tab.</comment>
+  </data>
+  <data name="Globals_ShowSessionDrawer.Description" xml:space="preserve">
+    <value>Shows a sidebar with a live preview of each open tab.</value>
+    <comment>A description for what the "show session drawer" setting does. Presented near "Globals_ShowSessionDrawer.Header".</comment>
+  </data>
   <data name="Globals_ShowPaneNotes.Header" xml:space="preserve">
     <value>Show pane notes</value>
     <comment>Header for a control to toggle pane notes, a small text area each terminal pane can show on top of its text.</comment>
@@ -593,6 +601,14 @@
   <data name="Globals_ShowPaneNotes.Description" xml:space="preserve">
     <value>Adds a button to the top right of each terminal pane that opens a note you can write in.</value>
     <comment>A description for what the "show pane notes" setting does. Presented near "Globals_ShowPaneNotes.Header".</comment>
+  </data>
+  <data name="Globals_SessionDrawerMinimumTabs.Header" xml:space="preserve">
+    <value>Minimum tabs to show the session drawer</value>
+    <comment>Header for a dropdown that chooses how many tabs must be open in a window before the session drawer appears.</comment>
+  </data>
+  <data name="Globals_SessionDrawerMinimumTabs.Description" xml:space="preserve">
+    <value>The session drawer appears when a window has at least this many tabs open.</value>
+    <comment>A description for what the "minimum tabs to show the session drawer" setting does. Presented near "Globals_SessionDrawerMinimumTabs.Header".</comment>
   </data>
   <data name="Globals_TabWidthModeCompact.Content" xml:space="preserve">
     <value>Compact</value>

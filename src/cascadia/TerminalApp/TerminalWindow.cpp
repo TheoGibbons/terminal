@@ -591,6 +591,14 @@ namespace winrt::TerminalApp::implementation
                                                               dpi,
                                                               commandlineSize.width,
                                                               commandlineSize.height);
+
+            // With a minimum of one tab the drawer is visible from the start, so
+            // make room for it. The terminal keeps the requested number of columns.
+            const auto globals = _settings.GlobalSettings();
+            if (!focusMode && globals.ShowSessionDrawer() && globals.SessionDrawerMinimumTabs() <= 1)
+            {
+                proposedSize.Width = TerminalPage::WidenForSessionDrawer(proposedSize.Width, scale);
+            }
         }
 
         if (_contentBounds)

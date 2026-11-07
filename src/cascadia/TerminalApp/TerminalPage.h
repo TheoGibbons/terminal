@@ -165,6 +165,7 @@ namespace winrt::TerminalApp::implementation
         void WindowVisibilityChanged(const bool showOrHide);
 
         float CalcSnappedDimension(const bool widthOrHeight, const float dimension) const;
+        static float WidenForSessionDrawer(const float terminalWidth, const float scale) noexcept;
 
         winrt::hstring ApplicationDisplayName();
         winrt::hstring ApplicationVersion();
@@ -300,7 +301,8 @@ namespace winrt::TerminalApp::implementation
         std::vector<SessionPreview> _sessionPreviews;
         std::vector<std::pair<winrt::guid, winrt::hstring>> _sessionDrawerProfiles;
         SafeDispatcherTimer _sessionPreviewTimer;
-        double _sessionDrawerFraction{ 0.15 };
+        static constexpr double _defaultSessionDrawerFraction{ 0.15 };
+        double _sessionDrawerFraction{ _defaultSessionDrawerFraction };
         bool _sessionDrawerLoaded{ false };
         bool _sessionDrawerCollapsed{ false };
         winrt::TerminalApp::ColorPickupFlyout _sessionPreviewColorPicker{ nullptr };
@@ -335,6 +337,7 @@ namespace winrt::TerminalApp::implementation
         void _SessionNotifyKeyUp(const IInspectable& sender, const Windows::UI::Xaml::Input::KeyRoutedEventArgs& args);
         void _SessionNotifyDelayChanged(const IInspectable& sender, const Microsoft::UI::Xaml::Controls::NumberBoxValueChangedEventArgs& args);
         void _SessionNotifyUrlChanged(const IInspectable& sender, const Windows::UI::Xaml::Controls::TextChangedEventArgs& args);
+        bool _IsSessionDrawerAvailable() const;
         void _UpdateSessionDrawerVisibility();
         void _RefreshSessionDrawer();
         void _RefreshSessionDrawerLaunchers();

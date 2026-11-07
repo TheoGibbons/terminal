@@ -2422,6 +2422,13 @@
           "description": "Show a resizable left sidebar with read-only live previews of the bottom ten visible rows of each tab. Available in the session drawer fork.",
           "type": "boolean"
         },
+        "experimental.sessionDrawerMinimumTabs": {
+          "default": 1,
+          "description": "The number of tabs a window needs before the session drawer appears. Available in the session drawer fork.",
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
         "experimental.showPaneNotes": {
           "default": true,
           "description": "Add a button to the top right of each terminal pane that opens a note you can write in. Available in the session drawer fork.",

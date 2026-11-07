@@ -29,6 +29,9 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         bool InvertedDisableAnimations();
         void InvertedDisableAnimations(bool value);
 
+        int32_t SessionDrawerMinimumTabsIndex() const;
+        void SessionDrawerMinimumTabsIndex(int32_t value);
+
         void ShowTitlebarToggled(const winrt::Windows::Foundation::IInspectable& sender, const winrt::Windows::UI::Xaml::RoutedEventArgs& args);
 
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_WindowSettings, AlwaysShowTabs);
@@ -42,6 +45,7 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_WindowSettings, MinimizeToNotificationArea);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_WindowSettings, ShowAdminShield);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_WindowSettings, EnableUnfocusedAcrylic);
+        PERMANENT_OBSERVABLE_PROJECTED_SETTING(_GlobalSettings, ShowSessionDrawer);
         PERMANENT_OBSERVABLE_PROJECTED_SETTING(_GlobalSettings, ShowPaneNotes);
 
     private:

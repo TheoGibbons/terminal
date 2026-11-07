@@ -403,6 +403,19 @@ namespace SettingsModelUnitTests
         globals->ClearShowSessionDrawer();
         VERIFY_IS_FALSE(globals->HasShowSessionDrawer());
         VERIFY_IS_TRUE(globals->ShowSessionDrawer());
+
+        VERIFY_ARE_EQUAL(1, globals->SessionDrawerMinimumTabs());
+        VERIFY_IS_FALSE(globals->HasSessionDrawerMinimumTabs());
+
+        globals->LayerJson(VerifyParseSucceeded(R"({"experimental.sessionDrawerMinimumTabs": 3})"), OriginTag::User);
+        VERIFY_ARE_EQUAL(3, globals->SessionDrawerMinimumTabs());
+        VERIFY_IS_TRUE(globals->HasSessionDrawerMinimumTabs());
+        VERIFY_ARE_EQUAL(3, globals->ToJson()["experimental.sessionDrawerMinimumTabs"].asInt());
+        VERIFY_ARE_EQUAL(3, globals->Copy()->SessionDrawerMinimumTabs());
+
+        globals->ClearSessionDrawerMinimumTabs();
+        VERIFY_IS_FALSE(globals->HasSessionDrawerMinimumTabs());
+        VERIFY_ARE_EQUAL(1, globals->SessionDrawerMinimumTabs());
     }
 
     void DeserializationTests::PaneNotesSetting()

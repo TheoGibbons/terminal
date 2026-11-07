@@ -625,9 +625,20 @@ namespace winrt::TerminalApp::implementation
         _UpdateSessionDrawerVisibility();
     }
 
+    bool TerminalPage::_IsSessionDrawerAvailable() const
+    {
+        if (!_settings || _isInFocusMode)
+        {
+            return false;
+        }
+        const auto globals = _settings.GlobalSettings();
+        const auto minimumTabs = std::clamp(globals.SessionDrawerMinimumTabs(), 1, 5);
+        return globals.ShowSessionDrawer() && _tabs.Size() >= gsl::narrow_cast<uint32_t>(minimumTabs);
+    }
+
     void TerminalPage::_UpdateSessionDrawerVisibility()
     {
-        const auto available = _settings && _settings.GlobalSettings().ShowSessionDrawer() && _tabs.Size() > 1 && !_isInFocusMode;
+        const auto available = _IsSessionDrawerAvailable();
         const auto enabled = available && !_sessionDrawerCollapsed;
         SessionDrawerControls().Visibility(available ? Visibility::Visible : Visibility::Collapsed);
         SessionDrawerToggleIcon().Glyph(enabled ? L"\uE76B" : L"\uE76C");
@@ -4304,7 +4315,7 @@ namespace winrt::TerminalApp::implementation
         {
             if (const auto tabImpl{ _GetFocusedTabImpl() })
             {
-                if (widthOrHeight && _settings.GlobalSettings().ShowSessionDrawer() && _tabs.Size() > 1 && !_isInFocusMode && dimension > 14.0f)
+                if (widthOrHeight && _IsSessionDrawerAvailable() && dimension > 14.0f)
                 {
                     const auto mainFraction = _sessionDrawerCollapsed ? 1.0f : static_cast<float>(1.0 - _sessionDrawerFraction);
                     const auto mainWidth = (dimension - 14.0f) * mainFraction;
@@ -4314,6 +4325,14 @@ namespace winrt::TerminalApp::implementation
             }
         }
         return dimension;
+    }
+
+    // Method Description:
+    // - Calculates the content width a new window needs so that the terminal
+    //   still gets terminalWidth once the session drawer and divider are shown.
+    float TerminalPage::WidenForSessionDrawer(const float terminalWidth, const float scale) noexcept
+    {
+        return std::ceil(terminalWidth / static_cast<float>(1.0 - _defaultSessionDrawerFraction)) + 14.0f * scale;
     }
 
     // Function Description:

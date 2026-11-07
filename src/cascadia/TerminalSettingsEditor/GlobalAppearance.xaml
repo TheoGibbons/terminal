@@ -155,6 +155,34 @@
                       Style="{StaticResource ComboBoxSettingStyle}" />
         </local:SettingsCard>
 
+        <!--  Show session drawer  -->
+        <local:SettingsCard x:Name="ShowSessionDrawer"
+                            x:Uid="Globals_ShowSessionDrawer">
+            <local:SettingsCard.HeaderIcon>
+                <FontIcon Glyph="&#xE90C;" />
+            </local:SettingsCard.HeaderIcon>
+            <ToggleSwitch IsOn="{x:Bind ViewModel.ShowSessionDrawer, Mode=TwoWay}"
+                          Style="{StaticResource ToggleSwitchInExpanderStyle}" />
+        </local:SettingsCard>
+
+        <!--  Minimum tabs to show the session drawer  -->
+        <local:SettingsCard x:Name="SessionDrawerMinimumTabs"
+                            x:Uid="Globals_SessionDrawerMinimumTabs">
+            <local:SettingsCard.HeaderIcon>
+                <FontIcon Glyph="&#xE8FD;" />
+            </local:SettingsCard.HeaderIcon>
+            <ComboBox AutomationProperties.AccessibilityView="Content"
+                      IsEnabled="{x:Bind ViewModel.ShowSessionDrawer, Mode=OneWay}"
+                      SelectedIndex="{x:Bind ViewModel.SessionDrawerMinimumTabsIndex, Mode=TwoWay}"
+                      Style="{StaticResource ComboBoxSettingStyle}">
+                <ComboBoxItem Content="1" />
+                <ComboBoxItem Content="2" />
+                <ComboBoxItem Content="3" />
+                <ComboBoxItem Content="4" />
+                <ComboBoxItem Content="5" />
+            </ComboBox>
+        </local:SettingsCard>
+
         <!--  Show pane notes  -->
         <local:SettingsCard x:Name="ShowPaneNotes"
                             x:Uid="Globals_ShowPaneNotes">

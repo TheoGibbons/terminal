@@ -112,6 +112,22 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
         _WindowSettings.DisableAnimations(!value);
     }
 
+    // The dropdown lists 1 to 5 in order, so an index is one less than its tab count.
+    int32_t GlobalAppearanceViewModel::SessionDrawerMinimumTabsIndex() const
+    {
+        return std::clamp(_GlobalSettings.SessionDrawerMinimumTabs(), 1, 5) - 1;
+    }
+
+    void GlobalAppearanceViewModel::SessionDrawerMinimumTabsIndex(int32_t value)
+    {
+        // A ComboBox reports -1 while it has no selection. Skipping unchanged values
+        // keeps the page from writing the setting to settings.json just by opening.
+        if (value >= 0 && value != SessionDrawerMinimumTabsIndex())
+        {
+            _GlobalSettings.SessionDrawerMinimumTabs(value + 1);
+        }
+    }
+
     void GlobalAppearanceViewModel::ShowTitlebarToggled(const winrt::Windows::Foundation::IInspectable& /* sender */, const RoutedEventArgs& /* args */)
     {
         // Set AlwaysShowTabs to true if ShowTabsInTitlebar was toggled OFF -> ON
